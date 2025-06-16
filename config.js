@@ -25,7 +25,7 @@ module.exports = {
     ANTIDELETE: process.env.ANTIDELETE || "on",
     ANTIDELETE_INCHAT: process.env.ANTIDELETE_INCHAT || "off",
     AUDIO_DATA: process.env.AUDIO_DATA || "King;🤍",
-    SUDO: process.env.SUDO || ""2347025480184, // example: 23412345667,2341234567
+    SUDO: process.env.SUDO || "2347025480184", // example: 23412345667,2341234567
     MODS: process.env.MODS || "",
     REJECT_CALL: process.env.REJECT_CALL || "off",
     WARNCOUNT: process.env.WARNCOUNT || "4",
