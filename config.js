@@ -17,7 +17,7 @@ module.exports = {
     STICKER_PACKNAME: process.env.STICKER_PACKNAME || "💙",
     STICKER_AUTHOR: process.env.STICKER_AUTHOR || "King Dav",
     BOT_PRESENCE: process.env.BOT_PRESENCE || "available", // for online, "composing" for typing 
-    REACT: process.env.REACT || false,
+    REACT: process.env.REACT || true,
     READ_MESSAGE: process.env.READ_MESSAGE || "false",
     OWNER_NAME: process.env.OWNER_NAME || "King Dav",
     BOT_NAME: process.env.BOT_NAME || "King Md",
