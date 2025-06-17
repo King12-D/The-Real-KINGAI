@@ -32,7 +32,7 @@ module.exports = {
     LANG_CODE: process.env.LANG_CODE || "en",
     VV_CMD: process.env.VV_CMD || "👀",
     RES_TYPE: process.env.RES_TYPE || "text",
-    CMD_REACT: process.env.CMD_REACT || "on",
+    CMD_REACT: process.env.CMD_REACT || "off",
     LOG_MESSAGES: process.env.LOG_MESSAGES || "off" // on/off
 }
 
