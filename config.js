@@ -6,7 +6,7 @@ module.exports = {
     SESSION_ID: process.env.SESSION_ID || 'kord_ai-d4kXUZNBVGaaMuao',
     OWNER_NUMBER: process.env.OWNER_NUMBER || "2347086613483",
     WORKTYPE: process.env.WORKTYPE || "private",
-    PREFIX: process.env.PREFIX || "[null]",
+    PREFIX: process.env.PREFIX || "[-]",
     ALWAYS_ONLINE: process.env.ALWAYS_ONLINE || true,
     MONGODB_URI: process.env.MONGODB_URI || "",
     STATUS_VIEW: process.env.STATUS_VIEW || true,
