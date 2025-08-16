@@ -29,6 +29,7 @@ kord({
   fromMe: true,
   type: "tools",
 }, async (m, text) => {
+  try {
   if (!m.quoted.sticker) return await m.send(`_Reply to a sticker with ${prefix}setcmd command_\n_example: ${prefix}setcmd ping_`)
   if (!text) return await m.send(`_provide a command also.._`) 
   var f = text?.trim()?.split(/\s+/)[0];
@@ -39,6 +40,10 @@ kord({
   stk_cmd[hash] = text
   await storeData("stk_cmd", JSON.stringify(stk_cmd, null, 2))
   return await m.send(`❏ Sticker set to *${f}*`)
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
 
 kord({
@@ -47,6 +52,7 @@ kord({
   fromMe: true,
   type: "tools",
 }, async (m) => {
+  try {
   if (!m.quoted.sticker) {
     return await m.send(`_Reply to a sticker to delete its command_`);
   }
@@ -61,6 +67,10 @@ kord({
   delete stk_cmd[hash];
   await storeData("stk_cmd", JSON.stringify(stk_cmd, null, 2));
   return await m.send(`*cmd deleted!*\n_from:_ *${oldCmd}*`);
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 });
 
 kord({
@@ -69,6 +79,7 @@ kord({
   fromMe: true,
   type: "tools",
 }, async (m) => {
+  try {
   const data = await getData("stk_cmd");
   const stk_cmd = data || {}
   const entries = Object.entries(stk_cmd);
@@ -80,6 +91,10 @@ kord({
     text += `❏ *${cmd}*\n_↳ hash:_ \`${hash.slice(0, 16)}...\`\n\n`;
   }
   return await m.send(text.trim());
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 });
 
 
@@ -366,12 +381,13 @@ _.mention -text Your Text_ (sends custom text when owner is mentioned, Example: 
 kord({
   on: "all"
 }, async (m, text) => {
+  try {
   var MData = await getData("mention_config") || {}
           if (!MData.active) {
             return;
           }
           var jidd = m.chat
-          if (text.includes(config().OWNER_NUMBER) || text.includes(m.ownerJid)) {
+          if (text.includes(config().OWNER_NUMBER) || text.includes(m.ownerJid) || m.mentionedJid.includes(m.ownerJid)) {
             if (MData.action === "react") {
             var pEmoji = MData.emoji
             return await m.client.sendMessage(jidd, { react: { text: pEmoji, key: m.key } })
@@ -380,6 +396,10 @@ kord({
               return await m.client.sendMessage(jidd, { text: pText }, { quoted: m })
             }
           }
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
 
 async function loadAfkData() {
@@ -409,6 +429,7 @@ kord({
   fromMe: true,
   type: "tools"
 }, async (m, text) => {
+  try {
   const txt = !text ? "" : text;
   global.afkData = await loadAfkData();
   if (txt.toLowerCase() === "off" || txt.toLowerCase() === "stop") {
@@ -448,52 +469,104 @@ kord({
     await saveAfkData(global.afkData);
     return await m.send(`@${m.sender.split("@")[0]} is now afk..\n_Reason:_ ${txt}`, {mentions: [m.sender]});
   }
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
 
 kord({
   on: "all",
 }, async (message, text, c, store) => {
-  const user = message.sender;
-  const afkData = await loadAfkData() || { users: {}, owner: { active: false, message: "", lastseen: "" } };
-  
-  if (message.message && message.message.reactionMessage) return;
-  
-  if (afkData.users && afkData.users[user] && afkData.users[user].active) {
-    afkData.users[user].active = false;
-    await saveAfkData(afkData);
-    const timeDiff = Math.round((new Date()).getTime() / 1000) - afkData.users[user].lastseen;
-    const timeStr = formatTime(timeDiff);
-    await message.send(`Welcome back @${user.split("@")[0]}!\nYou were afk for: *${timeStr}*`, {mentions: [user]});
-  }
-  
-  if (afkData.owner && afkData.owner.active && (text.includes(message.ownerJid) || text.includes(message.ownerJid.split('@')[0]) || (message.quoted && message.quoted.sender === message.ownerJid))) {
-    const timeDiff = Math.round((new Date()).getTime() / 1000) - afkData.owner.lastseen;
-    const timeStr = formatTime(timeDiff);
-    await message.send(`*Owner is currently AFK.*\n*Reason:* ${afkData.owner.message || "Not specified"}\n*Last seen:* ${timeStr} ago`);
-    var mesa = await message.forwardMessage(
-            message.ownerJid,
-            await global.store.findMsg(message.id),
-            { quoted: message }
-        );
-     await message.client.sendMessage(message.ownerJid, { text: `User: ${await global.store.getname(message.sender)}(${message.sender.split("@")[0]}) tagged/reply during afk, Message above:` }, { quoted: mesa });
-  }
-  
-  for (const mentionedUser in afkData.users) {
-    if (afkData.users[mentionedUser] && 
-        afkData.users[mentionedUser].active && 
-        (text.includes(mentionedUser) || 
-         text.includes(mentionedUser.split('@')[0]) || 
-         (message.quoted && message.quoted.sender === mentionedUser))) {
-      
-      const timeDiff = Math.round((new Date()).getTime() / 1000) - afkData.users[mentionedUser].lastseen;
-      const timeStr = formatTime(timeDiff);
-      await message.send(`@${mentionedUser.split("@")[0]} *is currently AFK*.\n*Reason:* ${afkData.users[mentionedUser].message || "Not specified"}\n*Last seen:* ${timeStr} ago`, {mentions: [mentionedUser]});
+  try {
+    const afkData = await loadAfkData() || { users: {}, owner: { active: false, message: "", lastseen: "" } }
+    const user = message.sender
+    if (message.message && message.message.reactionMessage) {
+      return
     }
-  }
-  
-  if (message.sender === message.ownerJid && afkData.owner && afkData.owner.active) {
-    afkData.owner.active = false;
-    await saveAfkData(afkData);
+    if (!text) {
+      return
+    }
+    
+    if (c && c.includes("afk")) {
+      return
+    }
+    
+    if (afkData.users && afkData.users[user] && afkData.users[user].active) {
+      afkData.users[user].active = false
+      await saveAfkData(afkData)
+      const timeDiff = Math.round((new Date()).getTime() / 1000) - afkData.users[user].lastseen
+      const timeStr = formatTime(timeDiff)
+      await message.send(`Welcome back @${user.split("@")[0]}!\nYou were afk for: *${timeStr}*`, {mentions: [user]})
+    }
+    
+    if (user === message.ownerJid && afkData.owner && afkData.owner.active) {
+      afkData.owner.active = false
+      await m.send("welcome back!")
+      await saveAfkData(afkData)
+      return
+    }
+    
+    if (afkData.owner && afkData.owner.active && user !== message.ownerJid) {
+      let shouldNotify = false
+      if (message.mentionedJid && message.mentionedJid.includes(message.ownerJid)) {
+        shouldNotify = true
+      }
+      
+      if (text.includes(message.ownerJid) || text.includes(message.ownerJid.split('@')[0])) {
+        shouldNotify = true
+      }
+      
+      if (message.quoted.sender === message.ownerJid) {
+        shouldNotify = true
+      }
+     
+      
+      if (shouldNotify) {
+        const timeDiff = Math.round((new Date()).getTime() / 1000) - afkData.owner.lastseen
+        const timeStr = formatTime(timeDiff)
+        await message.send(`*Owner is currently AFK.*\n*Reason:* ${afkData.owner.message || "Not specified"}\n*Last seen:* ${timeStr} ago`)
+        
+        const mesa = await message.forwardMessage(
+          message.ownerJid,
+          await global.store.findMsg(message.id),
+          { quoted: message }
+        )
+        await message.client.sendMessage(message.ownerJid, { 
+          text: `User: ${await global.store.getname(message.sender)}(${message.sender.split("@")[0]}) tagged/reply during afk, Message above:` 
+        }, { quoted: mesa })
+      }
+    }
+    
+    for (const mentionedUser in afkData.users) {
+      if (afkData.users[mentionedUser] && 
+          afkData.users[mentionedUser].active && 
+          user !== mentionedUser) {
+        
+        let shouldNotify = false
+        
+        if (message.mentionedJid && message.mentionedJid.includes(mentionedUser)) {
+          shouldNotify = true
+        }
+        
+        if (text.includes(mentionedUser) || text.includes(mentionedUser.split('@')[0])) {
+          shouldNotify = true
+        }
+        
+        if (message.quoted && message.quoted.sender === mentionedUser) {
+          shouldNotify = true
+        }
+       
+        if (shouldNotify) {
+          const timeDiff = Math.round((new Date()).getTime() / 1000) - afkData.users[mentionedUser].lastseen
+          const timeStr = formatTime(timeDiff)
+          await message.send(`@${mentionedUser.split("@")[0]} *is currently AFK*.\n*Reason:* ${afkData.users[mentionedUser].message || "Not specified"}\n*Last seen:* ${timeStr} ago`, {mentions: [mentionedUser]})
+        }
+      }
+    }
+    
+  } catch (e) {
+   console.log("cmd error", e)
   }
 })
 
@@ -574,6 +647,7 @@ kord({
   on: "all",
   fromMe: false,
 }, async(m, text) =>{
+  try {
   if (!await getData("areact_config")) {
     await storeData("areact_config", JSON.stringify(areact, null, 2));
     }
@@ -590,6 +664,10 @@ kord({
    } else if (aReact.global) {
      await m.react(randomEmoji)
    }
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
 
 kord({
@@ -598,6 +676,7 @@ kord({
   fromMe: true,
   type: "bot"
 }, async (m) => {
+  try {
   let sdata = await getData("ignored")
   if (!Array.isArray(sdata)) sdata = []
 
@@ -606,6 +685,10 @@ kord({
   sdata.push(m.chat)
   await storeData("ignored", JSON.stringify(sdata, null, 2))
   return m.send("_this chat is now ignored_")
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
 
 kord({
@@ -614,6 +697,7 @@ kord({
   fromMe: true,
   type: "bot"
 }, async (m) => {
+   try {
   let sdata = await getData("ignored")
   if (!Array.isArray(sdata)) sdata = []
 
@@ -622,6 +706,10 @@ kord({
   sdata = sdata.filter(jid => jid !== m.chat)
   await storeData("ignored", JSON.stringify(sdata, null, 2))
   return m.send("_this chat is now allowed_")
+   } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
 
 kord({
@@ -630,6 +718,7 @@ kord({
   fromMe: true,
   type: "bot"
 }, async (m, text) => {
+  try {
   let sdata = await getData("ignored")
   if (!Array.isArray(sdata)) sdata = []
 
@@ -650,4 +739,8 @@ kord({
   }
 
   return m.send("_usage: .bot on | .bot off_")
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
 })
