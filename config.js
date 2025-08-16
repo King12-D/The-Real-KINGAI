@@ -23,7 +23,7 @@ module.exports = {
     READ_MESSAGE: process.env.READ_MESSAGE || "false",
     OWNER_NAME: process.env.OWNER_NAME || "King_Dav",
     BOT_NAME: process.env.BOT_NAME || "KingMD",
-    RENDER_API_KEY: process.env.RENDER_API_KEY || "rnd_xSkoppbwIyruePtdSVj8tl0jxwa6",
+    RENDER_API_KEY: process.env.RENDER_API_KEY rnd_xSkoppbwIyruePtdSVj8tl0jxwa6,
     ANTIDELETE: process.env.ANTIDELETE || "on",
     ANTIDELETE_INCHAT: process.env.ANTIDELETE_INCHAT || "off",
     ANTI_EDIT: process.env.ANTI_EDIT || "on",
