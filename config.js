@@ -2,11 +2,11 @@
 const { existsSync } = require('fs')
 if (existsSync('config.env')) require('dotenv').config({ path: './config.env' })
 
-module.exports = { 
-    SESSION_ID: process.env.SESSION_ID || '',
-    OWNER_NUMBER: process.env.OWNER_NUMBER || "2349067339193",
+module.exports = {
+    SESSION_ID: process.env.SESSION_ID || 'kord_ai-d4kXUZNBVGaaMuao',
+    OWNER_NUMBER: process.env.OWNER_NUMBER || "2347086613483",
     WORKTYPE: process.env.WORKTYPE || "private",
-    PREFIX: process.env.PREFIX || "[.]",
+    PREFIX: process.env.PREFIX || "",
     ALWAYS_ONLINE: process.env.ALWAYS_ONLINE || true,
     MONGODB_URI: process.env.MONGODB_URI || "",
     STATUS_VIEW: process.env.STATUS_VIEW || true,
@@ -16,20 +16,20 @@ module.exports = {
     ERROR_MSG: process.env.ERROR_MSG || true,
     TIMEZONE: process.env.TIMEZONE || "Africa/Lagos",
     CAPTION: process.env.CAPTION || "",
-    STICKER_PACKNAME: process.env.STICKER_PACKNAME || "Kord",
+    STICKER_PACKNAME: process.env.STICKER_PACKNAME || "King_Dav",
     STICKER_AUTHOR: process.env.STICKER_AUTHOR || "🤍",
-    BOT_PRESENCE: process.env.BOT_PRESENCE || "available",
+    BOT_PRESENCE: process.env.BOT_PRESENCE || "available", // for online, "composing" for typing 
     REACT: process.env.REACT || false,
     READ_MESSAGE: process.env.READ_MESSAGE || "false",
-    OWNER_NAME: process.env.OWNER_NAME || "Mirage",
-    BOT_NAME: process.env.BOT_NAME || "Kord",
+    OWNER_NAME: process.env.OWNER_NAME || "King_Dav",
+    BOT_NAME: process.env.BOT_NAME || "KingMD",
     RENDER_API_KEY: process.env.RENDER_API_KEY,
     ANTIDELETE: process.env.ANTIDELETE || "on",
     ANTIDELETE_INCHAT: process.env.ANTIDELETE_INCHAT || "off",
-    ANTI_EDIT: process.env.ANTI_EDIT || "off",
+    ANTI_EDIT: process.env.ANTI_EDIT || "on",
     ANTI_EDIT_IN_CHAT: process.env.ANTI_EDIT_IN_CHAT || "off",
-    AUDIO_DATA: process.env.AUDIO_DATA || "Kord;🤍",
-    SUDO: process.env.SUDO || "",
+    AUDIO_DATA: process.env.AUDIO_DATA || "KingMD;🤍",
+    SUDO: process.env.SUDO || "", // example: 23412345667,2341234567
     MODS: process.env.MODS || "",
     REJECT_CALL: process.env.REJECT_CALL || "off",
     WARNCOUNT: process.env.WARNCOUNT || "4",
