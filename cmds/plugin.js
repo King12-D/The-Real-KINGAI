@@ -33,7 +33,7 @@ const arr = await extractUrlsFromString(input)
       if (parsed.host === "gist.github.com") {
         parsed.host = "gist.githubusercontent.com"
         rawUrl = parsed.toString() + "/raw"
-      } else if (parsed.host === "plugins.kord-ai.web.id") {
+      } else if (parsed.host === "plugins.kord.live") {
         rawUrl = parsed.toString().includes("/raw")
           ? parsed.toString()
           : parsed.toString().replace("/plugin/", "/api/plugin/") + "/raw"
@@ -48,6 +48,7 @@ const arr = await extractUrlsFromString(input)
       const { data, status } = await axios.get(rawUrl)
       if (status !== 200) return await m.send("plugin fetch failed")
 
+      if (data?.code) data = data.code
       const cmdMatch = data.match(/cmd:\s*["'](.*?)["']/)
       const pluginName = cmdMatch ? cmdMatch[1].trim().replace(/['"]/g, '') : null
       const file = (pluginName || "__" + Math.random().toString(36).substring(8)) + ".js"
@@ -93,7 +94,7 @@ kord({
 
   const input = match.trim()
   let norm = input
-if (norm.includes("plugins.kord-ai.web.id") && !norm.includes("/raw")) {
+if (norm.includes("plugins.kord.live") && !norm.includes("/raw")) {
   norm = norm.replace("/plugin/", "/api/plugin/") + "/raw"
 }
 let toRemove = plugins.find(p => p.name === input || p.url === norm)
