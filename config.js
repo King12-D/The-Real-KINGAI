@@ -31,7 +31,7 @@ module.exports = {
     AUDIO_DATA: process.env.AUDIO_DATA || "KingMD;🤍",
     SUDO: process.env.SUDO || "", // example: 23412345667,2341234567
     MODS: process.env.MODS || "",
-    REJECT_CALL: process.env.REJECT_CALL || "on",
+    REJECT_CALL: process.env.REJECT_CALL || "off",
     WARNCOUNT: process.env.WARNCOUNT || "4",
     LANG_CODE: process.env.LANG_CODE || "en",
     VV_CMD: process.env.VV_CMD || "👀",
