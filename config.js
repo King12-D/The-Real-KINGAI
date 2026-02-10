@@ -9,7 +9,7 @@ module.exports = {
     PREFIX: process.env.PREFIX || "",
     ALWAYS_ONLINE: process.env.ALWAYS_ONLINE || true,
     MONGODB_URI: process.env.MONGODB_URI || "",
-    STATUS_VIEW: process.env.STATUS_VIEW || true,
+    STATUS_VIEW: process.env.STATUS_VIEW || false,
     SAVE_STATUS: process.env.SAVE_STATUS || false,
     LIKE_STATUS: process.env.SAVE_STATUS || false,
     STATUS_EMOJI: process.env.STATUS_EMOJI || "🥏",
