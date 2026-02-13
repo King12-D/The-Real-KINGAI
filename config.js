@@ -18,7 +18,7 @@ module.exports = {
     CAPTION: process.env.CAPTION || "",
     STICKER_PACKNAME: process.env.STICKER_PACKNAME || "King_Dav",
     STICKER_AUTHOR: process.env.STICKER_AUTHOR || "🤍",
-    BOT_PRESENCE: process.env.BOT_PRESENCE || "available", // for online, "composing" for typing 
+    BOT_PRESENCE: process.env.BOT_PRESENCE || "available",
     REACT: process.env.REACT || false,
     READ_MESSAGE: process.env.READ_MESSAGE || "false",
     OWNER_NAME: process.env.OWNER_NAME || "David",
@@ -38,7 +38,7 @@ module.exports = {
     SAVE_CMD: process.env.SAVE_CMD || "📥",
     RES_TYPE: process.env.RES_TYPE || "text",
     CMD_REACT: process.env.CMD_REACT || "off",
-    LOG_MESSAGES: process.env.LOG_MESSAGES || "off",
+    LOG_MESSAGES: process.env.LOG_MESSAGES || "on",
     STARTUP_MSG: process.env.STARTUP_MSG || "on",
     MENU_IMAGE: process.env.MENU_IMAGE || "",
     WELCOME_MESSAGE: process.env.WELCOME_MESSAGE ||  `╭━━━々 𝚆 𝙴 𝙻 𝙲 𝙾 𝙼 𝙴 々━━━╮
