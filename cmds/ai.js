@@ -13,6 +13,8 @@ const { kord,
  gemini,
  chatgpt,
  getData,
+ chatbotResponse,
+ clearChatHistory,
  storeData,
  prefix,
  commands
@@ -20,244 +22,164 @@ const { kord,
 const axios = require('axios') 
 
 kord({
-        cmd: "gemma",
-        desc: "chat with ai (gemma)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "Gemma"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-kord({
-        cmd: "gpt",
-        desc: "chat with ai (gpt)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "gpt-3.5-turbo"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-
-kord({
-        cmd: "llama",
-        desc: "chat with ai (llama)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "Llama-2-int8"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-
-kord({
-        cmd: "llama2",
-        desc: "chat with ai (llama)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "Llama-2-int8"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-kord({
-        cmd: "mistral",
-        desc: "chat with ai (mistral)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "Mistral"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-
-kord({
-        cmd: "llama3",
-        desc: "chat with ai (llama)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                        return await m.send(await chatWithAi(prompt, "Llama-2-awq"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-kord({
-        cmd: "hermes",
-        desc: "chat with ai (hermes)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "OpenHermes"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-kord({
-        cmd: "zephyr",
-        desc: "chat with ai (Zephyr)",
-        fromMe: wtype,
-        type: "ai",
-}, async (m, text) => {try {
-
-        var prompt = text || m.quoted?.text
-
-                if (!prompt) return await m.send("Hi!, What's Your Prompt?")
-
-                return await m.send(await chatWithAi(prompt, "Zephyr"))
-} catch (e) {
-
-        console.log("cmd error", e)
-
-        return await m.sendErr(e)
-}})
-
-const API_BASE_URL = 'https://api.mistral.ai/v1'
-const API_KEY = 'AA46jQW0VLsz2x7FW7sCUnBVIpBaa1qW'
-const AGENT_ID = 'ag:4151fcb9:20250104:untitled-agent:d1bde2e5'
-
-const chatHistories = new Map()
-
-function stripThoughts(text) {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
-}
-
-async function getAIResponse(m, quoted) {
-  const chatId = m.chat || m.chatId || m.key?.remoteJid || 'unknown'
-  const rawMessage = JSON.stringify(m, null, 2)
-  const rawQuoted = quoted ? JSON.stringify(quoted, null, 2) : null
-
-  let message = rawQuoted
-    ? `Message:\n${rawMessage}\n\nQuoted:\n${rawQuoted}`
-    : `Message:\n${rawMessage}`
-
+  cmd: "openai",
+  desc: "chat with ai (openai gpt-5 nano)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
   try {
-    if (!chatHistories.has(chatId)) chatHistories.set(chatId, [])
-    const history = chatHistories.get(chatId)
-    history.push({ role: 'user', content: message })
-
-    const contextMessages = history.slice(-10)
-    const messages = [
-      {
-        role: 'system',
-        content: "You're a WhatsApp bot. You receive raw JSON of messages and quoted messages. Respond with useful answers in WhatsApp format using *bold*, _italic_, ~strikethrough~, and ```monospace```."
-      },
-      ...contextMessages
-    ]
-
-    const res = await axios.post(`${API_BASE_URL}/agents/completions`, {
-      agent_id: AGENT_ID,
-      messages,
-      max_tokens: 500,
-      stream: false,
-      tool_choice: 'auto',
-      parallel_tool_calls: true,
-      prompt_mode: 'reasoning'
-    }, {
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
-    })
-
-    const raw = res.data?.choices?.[0]?.message?.content
-    const output = stripThoughts(raw)
-
-    if (output) {
-      history.push({ role: 'assistant', content: output })
-      chatHistories.set(chatId, history.slice(-10))
-      return output
-    } else {
-      throw new Error('Empty response')
-    }
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "openai"))
   } catch (e) {
-    console.error('Mistral AI Error:', e.message)
-    if (e.code === 'ECONNABORTED') throw new Error('Request timeout - try again')
-    if (e.response?.status === 429) throw new Error('Rate limit exceeded - wait a moment')
-    if (e.response?.status >= 500) throw new Error('Server error - try later')
-    throw new Error('Failed to get AI response')
+    console.log("cmd error", e)
+    return await m.sendErr(e)
   }
-}
+})
 
-function clearChatHistory(chatId) {
-  chatHistories.delete(chatId)
-  return true
-}
-
-async function getAIStatus() {
+kord({
+  cmd: "gpt",
+  desc: "chat with ai (openai fast)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/ai/status`, {
-      timeout: 10000
-    })
-    return response.data.data
-  } catch (error) {
-    console.error('AI status error:', error.message)
-    return null
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "openai-fast"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
   }
-}
+})
+
+kord({
+  cmd: "gemini",
+  desc: "chat with ai (gemini 2.5)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "gemini"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "aisearch",
+  desc: "chat with ai (gemini with google search)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "gemini-search"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "mistral",
+  desc: "chat with ai (mistral small 3.2)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "mistral"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "deepseek",
+  desc: "chat with ai (deepseek v3.1 reasoning)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "deepseek"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "reasoning",
+  desc: "chat with ai (openai o4 mini reasoning)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "openai-reasoning"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "coder",
+  desc: "chat with ai (qwen coder)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "qwen-coder"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "llama",
+  desc: "chat with ai (llama 3.1)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "roblox-rp"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "bidara",
+  desc: "chat with ai (nasa biomimetic designer)",
+  fromMe: wtype,
+  type: "ai",
+}, async (m, text) => {
+  try {
+    var prompt = text || m.quoted?.text
+    if (!prompt) return await m.send("Hi!, What's Your Prompt?")
+    return await m.send(await chatWithAi(prompt, "bidara"))
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
 
 var chatc = {
     active: false,
@@ -265,7 +187,7 @@ var chatc = {
     activeChats: [
         '1234@g.us'
     ],
-}
+} 
 
 if (!getData("chatbot_cfg")) {
     storeData("chatbot_cfg", JSON.stringify(chatc, null, 2))
@@ -286,12 +208,12 @@ kord({
       [`${cmd} status`]: "📊 Status",
       [`${cmd} clear`]: "🗑️ Clear History"
     })
-    
+
     const args = text.split(" ")
     if (args && args.length > 0) {
       const option = args[0].toLowerCase()
       const value = args.length > 1 ? args[1] : null
-      
+
       if (option === 'on' && value === 'all') {
         chatc.global = true
         await storeData('chatbot_cfg', JSON.stringify(chatc, null, 2))
@@ -320,7 +242,7 @@ kord({
           return await m.send('_Unable to fetch AI status_')
         }
       } else if (option === 'clear') {
-        const cleared =  clearChatHistory(m.chat)
+        const cleared = clearChatHistory(m.chat)
         if (cleared) {
           return await m.send('_Chat history cleared successfully_')
         } else {
@@ -346,9 +268,9 @@ kord({
         [`${cmd} clear`]: "🗑️ Clear History"
       })
     }
-  } catch (err) {
-    console.error(err)
-    return await m.send(`An error occurred: ${err.message}`)
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
   }
 })
 
@@ -371,20 +293,17 @@ kord({
     }, 1000)
 
     try {
-      const fullResponse = await getAIResponse(text, m.chat)
+      const response = await chatbotResponse(text, m.chat)
       clearInterval(typingInterval)
-
-      const [messagePart, codePart] = fullResponse.split("$$")
-
-      if (messagePart?.trim()) await m.send(messagePart.trim())
-
-      if (codePart?.trim()) {
+      
+      if (response?.trim()) {
+        await m.send(response.trim())
       }
     } catch (error) {
       clearInterval(typingInterval)
       console.error("AI response error:", error)
 
-      let errorMessage = "hmm, i can't process that rn, try again"
+      let errorMessage = "error.."
 
       if (error.message.includes('timeout')) {
         errorMessage = "Response took too long, please try again"
@@ -396,11 +315,11 @@ kord({
 
       return await m.send(errorMessage)
     }
-  } catch (err) {
-    console.error("Message handling error:", err)
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
   }
 })
-
 
 kord({
   cmd: "aitest",
@@ -410,7 +329,7 @@ kord({
 }, async (m) => {
   try {
     const testMessage = "Hello, this is a test message"
-    const response = await getAIResponse(testMessage, `test_${Date.now()}`)
+    const response = await getAIResponse({ chat: `test_${Date.now()}` }, null)
     await m.send(`*AI Test Successful!*\n\n*Sent:* ${testMessage}\n*Response:* ${response}`)
   } catch (error) {
     await m.send(`*AI Test Failed:* ${error.message}`)

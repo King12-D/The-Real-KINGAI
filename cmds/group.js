@@ -1,11 +1,12 @@
 /* 
- * Copyright © 2025 Kenny
+ * Copyright © 2025 Mirage
  * This file is part of Kord and is licensed under the GNU GPLv3.
  * And I hope you know what you're doing here.
  * You may not use this file except in compliance with the License.
  * See the LICENSE file or https://www.gnu.org/licenses/gpl-3.0.html
  * -------------------------------------------------------------------------------
  */
+
 
 const {
   kord,
@@ -26,6 +27,17 @@ const {
 } = require("../core")
 const { warn } = require("../core/db")
 const pre = prefix 
+// let activeTimers = new Map()
+
+if (!global.activeTimers) {
+  global.activeTimers = new Map()
+}
+const activeTimers = global.activeTimers
+let clientInstance
+
+
+
+
 
 kord({
 cmd: "join",
@@ -204,9 +216,9 @@ cmd: "kick",
     await m.send("_*✓ Kicking all users in 10 seconds*_\n_Use restart command to cancel_")
     await sleep(10000)
     let { participants } = await m.client.groupMetadata(m.chat);
-    participants = participants.filter(p => p.jid !== m.user.jid);
+    participants = participants.filter(p => (p.jid || p.phoneNumber) !== m.user.jid);
     for (let key of participants) {
-    const jid = parsedJid(key.jid);
+    const jid = parsedJid(key.jid || key.phoneNumber);
     await m.client.groupParticipantsUpdate(m.chat, [jid], "remove");
     if (config().KICK_AND_BLOCK) await m.client.updateBlockStatus(jid, "block");
     await m.send(`_*✓ @${jid[0].split("@")[0]} kicked*_`, { mentions: [jid] });
@@ -271,42 +283,246 @@ cmd: "demote",
 })
 
 kord({
-cmd: "mute",
-  desc: "mute a group to allow only admins to send message",
+  cmd: "mute",
+  desc: "mute a group (immediate or scheduled)",
   fromMe: wtype,
   gc: true,
   adminOnly: true,
   type: "group"
-}, async (m, text) => {
+}, async (m, text, cmd) => {
   try {
-    var botAd = await isBotAdmin(m);
-    if (!botAd) return await m.send("✘_*Bot Needs To Be Admin!*_");
-    await m.client.groupSettingUpdate(m.chat, "announcement");
-    return await m.send("✓ Group Muted");
+    if (!clientInstance) {
+      clientInstance = m.client
+    }
+    
+    var botAd = await isBotAdmin(m)
+    if (!botAd) return await m.send("✘_*Bot Needs To Be Admin!*_")
+    
+    const chatJid = m.chat
+    var muteData = await getData("mute_timers") || {}
+    
+    try {
+      const meta = await m.client.groupMetadata(chatJid)
+      if (meta.announce === true) {
+        return await m.send("✘ Group is already muted")
+      }
+    } catch (e) {}
+    
+    if (!text) {
+      await m.client.groupSettingUpdate(chatJid, "announcement")
+      
+      if (activeTimers.has(chatJid)) {
+        clearTimeout(activeTimers.get(chatJid))
+        activeTimers.delete(chatJid)
+      }
+      
+      if (muteData[chatJid]) {
+        delete muteData[chatJid]
+        await storeData("mute_timers", muteData)
+      }
+      
+      return await m.send("✓ Group Muted")
+    }
+    
+    const timeMatch = text.match(/^(\d+)(s|m|hr|h|d|w)$/i)
+    if (!timeMatch) {
+      return await m.send(`✘ Invalid time format\nUsage: ${cmd} 10s (seconds)\n${cmd} 30m (minutes)\n${cmd} 2hr (hours)\n${cmd} 1d (days)\n${cmd} 1w (weeks)`)
+    }
+    
+    const amount = parseInt(timeMatch[1])
+    const unit = timeMatch[2].toLowerCase()
+    
+    let milliseconds
+    switch(unit) {
+      case 's': milliseconds = amount * 1000; break
+      case 'm': milliseconds = amount * 60 * 1000; break
+      case 'h':
+      case 'hr': milliseconds = amount * 60 * 60 * 1000; break
+      case 'd': milliseconds = amount * 24 * 60 * 60 * 1000; break
+      case 'w': milliseconds = amount * 7 * 24 * 60 * 60 * 1000; break
+      default: return await m.send("✘ Invalid time unit")
+    }
+    
+    if (milliseconds > 7 * 24 * 60 * 60 * 1000) {
+      return await m.send("✘ Maximum mute time is 7 days")
+    }
+    
+    await m.client.groupSettingUpdate(chatJid, "announcement")
+    
+    let timeDisplay
+    if (unit === 's') timeDisplay = `${amount} second${amount > 1 ? 's' : ''}`
+    else if (unit === 'm') timeDisplay = `${amount} minute${amount > 1 ? 's' : ''}`
+    else if (unit === 'h' || unit === 'hr') timeDisplay = `${amount} hour${amount > 1 ? 's' : ''}`
+    else if (unit === 'd') timeDisplay = `${amount} day${amount > 1 ? 's' : ''}`
+    else if (unit === 'w') timeDisplay = `${amount} week${amount > 1 ? 's' : ''}`
+    
+    const unmuteTime = Date.now() + milliseconds
+    muteData[chatJid] = {
+      unmuteTime: unmuteTime,
+      setBy: m.sender,
+      setAt: Date.now(),
+      duration: milliseconds,
+      type: "timer_mute"
+    }
+    
+    await storeData("mute_timers", muteData)
+    
+    await m.send(`✓ Group Muted for ${timeDisplay}`)
+    
+    if (activeTimers.has(chatJid)) {
+      clearTimeout(activeTimers.get(chatJid))
+    }
+    
+    const timerId = setTimeout(async () => {
+      try {
+        const meta = await m.client.groupMetadata(chatJid).catch(() => null)
+        if (meta && meta.announce === true) {
+          await m.client.groupSettingUpdate(chatJid, "not_announcement")
+          await m.client.sendMessage(chatJid, { text: "✓ Group Unmuted" })
+        }
+        
+        const currentData = await getData("mute_timers") || {}
+        if (currentData[chatJid]) {
+          delete currentData[chatJid]
+          await storeData("mute_timers", currentData)
+        }
+        activeTimers.delete(chatJid)
+        
+      } catch (error) {}
+    }, milliseconds)
+    
+    activeTimers.set(chatJid, timerId)
+    
   } catch (e) {
-    console.log("cmd error", e)
+    console.log("mute cmd error", e)
     return await m.sendErr(e)
   }
 })
 
 kord({
-cmd: "unmute",
-  desc: "unmute a group to allow all members to send message",
+  cmd: "unmute",
+  desc: "unmute a group (immediate or scheduled)",
   fromMe: wtype,
   gc: true,
   adminOnly: true,
   type: "group"
-}, async (m, text) => {
+}, async (m, text, cmd) => {
   try {
-    var botAd = await isBotAdmin(m);
-    if (!botAd) return await m.send("✘_*Bot Needs To Be Admin!*_");
-    await m.client.groupSettingUpdate(m.chat, "not_announcement");
-    return await m.send("✓ Group Unmuted");
+    if (!clientInstance) {
+      clientInstance = m.client
+    }
+    
+    var botAd = await isBotAdmin(m)
+    if (!botAd) return await m.send("✘_*Bot Needs To Be Admin!*_")
+    
+    const chatJid = m.chat
+    var muteData = await getData("mute_timers") || {}
+    
+    let isMuted = false
+    try {
+      const meta = await m.client.groupMetadata(chatJid)
+      isMuted = meta.announce === true
+    } catch (e) {
+      return await m.send("✘ Error checking group")
+    }
+    
+    if (!text) {
+      if (!isMuted) {
+        return await m.send("✘ Group is not muted")
+      }
+      
+      await m.client.groupSettingUpdate(chatJid, "not_announcement")
+      
+      if (activeTimers.has(chatJid)) {
+        clearTimeout(activeTimers.get(chatJid))
+        activeTimers.delete(chatJid)
+      }
+      
+      if (muteData[chatJid]) {
+        delete muteData[chatJid]
+        await storeData("mute_timers", muteData)
+      }
+      
+      return await m.send("✓ Group Unmuted")
+    }
+    
+    const timeMatch = text.match(/^(\d+)(s|m|hr|h|d|w)$/i)
+    if (!timeMatch) {
+      return await m.send(`✘ Invalid time format\nUsage: ${cmd} (immediate)\n${cmd} 10s (unmute for 10s)`)
+    }
+    
+    const amount = parseInt(timeMatch[1])
+    const unit = timeMatch[2].toLowerCase()
+    
+    let milliseconds
+    switch(unit) {
+      case 's': milliseconds = amount * 1000; break
+      case 'm': milliseconds = amount * 60 * 1000; break
+      case 'h':
+      case 'hr': milliseconds = amount * 60 * 60 * 1000; break
+      case 'd': milliseconds = amount * 24 * 60 * 60 * 1000; break
+      case 'w': milliseconds = amount * 7 * 24 * 60 * 60 * 1000; break
+      default: return await m.send("✘ Invalid time unit")
+    }
+    
+    if (milliseconds > 7 * 24 * 60 * 60 * 1000) {
+      return await m.send("✘ Maximum time is 7 days")
+    }
+    
+    if (isMuted) {
+      await m.client.groupSettingUpdate(chatJid, "not_announcement")
+    }
+    
+    let timeDisplay
+    if (unit === 's') timeDisplay = `${amount} second${amount > 1 ? 's' : ''}`
+    else if (unit === 'm') timeDisplay = `${amount} minute${amount > 1 ? 's' : ''}`
+    else if (unit === 'h' || unit === 'hr') timeDisplay = `${amount} hour${amount > 1 ? 's' : ''}`
+    else if (unit === 'd') timeDisplay = `${amount} day${amount > 1 ? 's' : ''}`
+    else if (unit === 'w') timeDisplay = `${amount} week${amount > 1 ? 's' : ''}`
+    
+    await m.send(`✓ Group Unmuted for ${timeDisplay}`)
+    
+    if (activeTimers.has(chatJid)) {
+      clearTimeout(activeTimers.get(chatJid))
+    }
+    
+    const muteTime = Date.now() + milliseconds
+    muteData[chatJid] = {
+      unmuteTime: muteTime,
+      setBy: m.sender,
+      setAt: Date.now(),
+      duration: milliseconds,
+      type: "timer_unmute"
+    }
+    
+    await storeData("mute_timers", muteData)
+    
+    const timerId = setTimeout(async () => {
+      try {
+        const meta = await m.client.groupMetadata(chatJid).catch(() => null)
+        if (meta && meta.announce === false) {
+          await m.client.groupSettingUpdate(chatJid, "announcement")
+          await m.client.sendMessage(chatJid, { text: "✓ Group Muted" })
+        }
+        
+        const currentData = await getData("mute_timers") || {}
+        if (currentData[chatJid]) {
+          delete currentData[chatJid]
+          await storeData("mute_timers", currentData)
+        }
+        activeTimers.delete(chatJid)
+        
+      } catch (error) {}
+    }, milliseconds)
+    
+    activeTimers.set(chatJid, timerId)
+    
   } catch (e) {
-    console.log("cmd error", e)
+    console.log("unmute cmd error", e)
     return await m.sendErr(e)
   }
 })
+
 
 kord({
 cmd: "invite|glink",
@@ -348,7 +564,7 @@ cmd: "revoke",
 })
 
 kord({
-cmd: "tag",
+  cmd: "tag",
   desc: "tag all memebers/admins/me/text",
   fromMe: wtype,
   gc: true,
@@ -356,39 +572,47 @@ cmd: "tag",
   type: "group"
 }, async (m, text, cmd, store) => {
   try {
-    if (!m.isGroup) return await m.send(`@${m.sender.split("@")[0]}`, { mentions: [m.sender] });   
-  const { participants } = await m.client.groupMetadata(m.chat);
-  let admins = participants.filter(v => v.admin !== null).map(v => v.jid);
-  let msg = "";
-  
-  if (text === "all" || text === "everyone") {
-    participants.forEach((p, i) => {
-      msg += `❐ ${i + 1}. @${p.jid.split('@')[0]}\n`;
-    });
-    await m.send(msg, { mentions: participants.map(a => a.jid) });
-  } 
-  else if (text === "admin" || text === "admins") {
-    admins.forEach((admin, i) => {
-      msg += `❐ ${i + 1}. @${admin.split('@')[0]}\n`;
-    });
-    return await m.send(msg, { mentions: admins });
-  } 
-  else if (text === "me" || text === "mee") {
-    return await m.send(`@${m.sender.split("@")[0]}`, { mentions: [m.sender] });
-  } 
-  else if (text) {
-    const message = text || m.quoted.text;
-    return await m.send(message, { mentions: participants.map(a => a.jid) });
-  } 
-  else if (m.quoted) {
-    return await m.forwardMessage(
-            m.chat,
-            await store.findMsg(m.quoted.id),
-            { contextInfo: { mentionedJid: participants.map(a => a.jid) }, quoted: m }
-        );
-  } else { 
-  return await m.send(`✘ Usage:\ntag all\ntag admins\ntag me\ntag <message>\ntag (reply to message)`);
-  }
+    if (!m.isGroup) return await m.send(`@${m.sender.split("@")[0]}`, { mentions: [m.sender] })
+
+    const { participants } = await m.client.groupMetadata(m.chat)
+
+    let admins = participants
+      .filter(v => v.admin === 'admin' || v.admin === 'superadmin')
+      .map(v => v.jid || v.phoneNumber)
+
+    let msg = ""
+
+    if (text === "all" || text === "everyone") {
+      participants.forEach((p, i) => {
+        msg += `❐ ${i + 1}. @${(p.jid || p.phoneNumber).split('@')[0]}\n`
+      })
+      await m.send(msg, { mentions: participants.map(a => a.jid || a.phoneNumber) })
+    }
+
+    else if (text === "admin" || text === "admins") {
+      admins.forEach((admin, i) => {
+        msg += `❐ ${i + 1}. @${admin.split('@')[0]}\n`
+      })
+      return await m.send(msg, { mentions: admins })
+    }
+
+    else if (text === "me" || text === "mee") {
+      return await m.send(`@${m.sender.split("@")[0]}`, { mentions: [m.sender] })
+    }
+
+    else if (text) {
+      return await m.send(text, { mentions: participants.map(a => a.jid || a.phoneNumber) })
+    }
+
+    else if (m.quoted) {
+      return await m.forwardMessage(
+        m.chat,
+        await store.findMsg(m.quoted.id),
+        { contextInfo: { mentionedJid: participants.map(a => a.jid || a.phoneNumber) }, quoted: m }
+      )
+    }
+
+    return await m.send(`✘ Usage:\ntag all\ntag admins\ntag me\ntag <message>\ntag (reply to message)`)
   } catch (e) {
     console.log("cmd error", e)
     return await m.sendErr(e)
@@ -396,7 +620,7 @@ cmd: "tag",
 })
 
 kord({
-cmd: "tagall",
+  cmd: "tagall",
   desc: "tag all memebers",
   fromMe: wtype,
   gc: true,
@@ -404,13 +628,19 @@ cmd: "tagall",
   type: "group"
 }, async (m, text) => {
   try {
-    const { participants } = await m.client.groupMetadata(m.chat);
-    let admins = participants.filter(v => v.admin !== null).map(v => v.jid);
+    const { participants } = await m.client.groupMetadata(m.chat)
+    
+    let admins = participants
+      .filter(v => v.admin != null)
+      .map(v => v.jid || v.phoneNumber)
+    
     let msg = `❴ ⇛ *TAGALL* ⇚ ❵\n*Message:* ${text ? text : "blank"}\n*Caller:* @${m.sender.split("@")[0]}\n\n`
+    
     participants.forEach((p, i) => {
-    msg += `❧ ${i + 1}. @${p.jid.split('@')[0]}\n`; 
-    });
-    await m.send(msg, { mentions: participants.map(a => a.jid) });
+      msg += `❧ ${i + 1}. @${(p.jid || p.phoneNumber).split('@')[0]}\n`
+    })
+    
+    await m.send(msg, { mentions: participants.map(a => a.jid || a.phoneNumber) })
   } catch (e) {
     console.log("cmd error", e)
     return await m.sendErr(e)
@@ -655,7 +885,7 @@ on: "all",
     if(m.message.reactionMessage) return;
     const cJid = m.key.remoteJid
     const groupMetadata = await getMeta(m.client, m.chat);
-    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid);
+    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber);
     const wCount = new Map()
     if ((m.isBot || m.isBaileys) && !m.fromMe) {
     var sdata = await getData("antibot_config");
@@ -1507,7 +1737,7 @@ on: "all",
     if(m.message.reactionMessage) return;
     const cJid = m.key.remoteJid
     const groupMetadata = await getMeta(m.client, m.chat);
-    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid);
+    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber);
     const wCount = new Map()
     if (m.message?.groupStatusMentionMessage && !m.fromMe) {
     var sdata = await getData("antigm_config");
@@ -1787,7 +2017,7 @@ on: "all",
     const cJid = m.key.remoteJid
     const sender = m.sender
     const groupMetadata = await getMeta(m.client, m.chat)
-    const admins = groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid)
+    const admins = groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber)
     
     if (admins.includes(sender)) return
     
@@ -2009,7 +2239,7 @@ on: "all",
     const cJid = m.key.remoteJid
     const sender = m.sender
     const groupMetadata = await getMeta(m.client, m.chat)
-    const admins = groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid)
+    const admins = groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber)
     
     if (admins.includes(sender)) return
     
@@ -2020,8 +2250,8 @@ on: "all",
     if (isExist) {
     
     const { participants } = await m.client.groupMetadata(m.chat)
-    const allParticipants = participants.map(p => p.jid)
-    const adminJids = participants.filter(p => p.admin !== null).map(p => p.jid)
+    const allParticipants = participants.map(p => p.jid || p.phoneNumber )
+    const adminJids = participants.filter(p => p.admin !== null).map(p => p.jid || p.phoneNumber )
     const mentionedCount = m.mentionedJid.length
     const totalParticipants = allParticipants.length
     

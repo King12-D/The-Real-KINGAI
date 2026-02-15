@@ -24,7 +24,7 @@
   "homepage": "https://github.com/M3264/Kord-Ai#readme",
   "dependencies": {
     "axios": "^0.27.2",
-    "baileys": "6.7.20",
+    "baileys": "7.0.0-rc.9",
     "chalk": "^4.1.2",
     "cheerio": "^1.0.0-rc.10",
     "child_process": "^1.0.2",
@@ -51,6 +51,7 @@
     "pino": "^7.9.2",
     "pm2": "^6.0.5",
     "sequelize": "^6.21.4",
+    "sharp": "0.32.6",
     "sqlite": "5.1.1",
     "sqlite3": "^5.0.11",
     "uuid": "^11.1.0",
