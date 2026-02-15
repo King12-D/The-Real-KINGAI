@@ -38,7 +38,7 @@ module.exports = {
     SAVE_CMD: process.env.SAVE_CMD || "📥",
     RES_TYPE: process.env.RES_TYPE || "text",
     CMD_REACT: process.env.CMD_REACT || "off",
-    LOG_MESSAGES: process.env.LOG_MESSAGES || "on",
+    LOG_MESSAGES: process.env.LOG_MESSAGES || "off",
     STARTUP_MSG: process.env.STARTUP_MSG || "on",
     MENU_IMAGE: process.env.MENU_IMAGE || "",
     WELCOME_MESSAGE: process.env.WELCOME_MESSAGE ||  `╭━━━々 𝚆 𝙴 𝙻 𝙲 𝙾 𝙼 𝙴 々━━━╮
