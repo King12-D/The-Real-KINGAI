@@ -3,7 +3,7 @@ const { existsSync } = require('fs')
 if (existsSync('config.env')) require('dotenv').config({ path: './config.env' })
 
 module.exports = {
-    SESSION_ID: process.env.SESSION_ID || 'kord_ai-tY80a6i7O797hl6l',
+    SESSION_ID: process.env.SESSION_ID || 'kord_ai-fj9sXc5X8FbPjZOv',
     OWNER_NUMBER: process.env.OWNER_NUMBER || "2347086613483",
     WORKTYPE: process.env.WORKTYPE || "private",
     PREFIX: process.env.PREFIX || "",
@@ -21,14 +21,14 @@ module.exports = {
     BOT_PRESENCE: process.env.BOT_PRESENCE || "available",
     REACT: process.env.REACT || false,
     READ_MESSAGE: process.env.READ_MESSAGE || "false",
-    OWNER_NAME: process.env.OWNER_NAME || "David",
-    BOT_NAME: process.env.BOT_NAME || "KingMD",
+    OWNER_NAME: process.env.OWNER_NAME || "King Dave",
+    BOT_NAME: process.env.BOT_NAME || "Muna",
     RENDER_API_KEY: process.env.RENDER_API_KEY,
     ANTIDELETE: process.env.ANTIDELETE || "on",
     ANTIDELETE_INCHAT: process.env.ANTIDELETE_INCHAT || "off",
     ANTI_EDIT: process.env.ANTI_EDIT || "on",
     ANTI_EDIT_IN_CHAT: process.env.ANTI_EDIT_IN_CHAT || "off",
-    AUDIO_DATA: process.env.AUDIO_DATA || "KingMD;🤍",
+    AUDIO_DATA: process.env.AUDIO_DATA || "Muna;🤍",
     SUDO: process.env.SUDO || "", // example: 23412345667,2341234567
     MODS: process.env.MODS || "",
     REJECT_CALL: process.env.REJECT_CALL || "off",
