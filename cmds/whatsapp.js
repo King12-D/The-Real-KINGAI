@@ -312,26 +312,142 @@ kord({
 
 
 kord({
-        cmd: "forward|fwrd",
-        desc: "forward a message",
-        fromMe: true,
-        type: "user",
-}, async (m, text, cmd, store) => {
+  cmd: "forward|fwrd",
+  desc: "forward a quoted",
+  fromMe: true,
+  type: "user",
+}, async (m, text, c) => {
   try {
-    if (!m.quoted) return await m.send("_reply to the msg you want to forward.._")
-    if (!text) return await m.send(`_*Provide a number/jid!*_\n_example ${cmd} 2348033221144_\n_${cmd} 2348033221144@s.whatsapp.net_\n\nuse ${prefix}jid to get the jid of a chat`)
-    let jidd
-    if (text.includes("@g.us") || text.includes("@s.whatsapp.net") || text.includes("newsletter")) {
-    jidd = text;
-    } else {
-    jidd = `${text}@s.whatsapp.net`;
+    if (!text) {
+      return await m.send(
+        `_*Provide a number/jid!*_\n` +
+        `_Example: ${c} 2348033221144_\n` +
+        `${c} 2348033221144@s.whatsapp.net\n` +
+        `${c} 2348033221144,2348033221144@s.whatsapp.net\n\n` +
+        `Use ${prefix}jid to get the jid of a chat`
+      )
     }
-    await m.forwardMessage(jidd, await store.loadMessage(m.chat, m.quoted))
+if (!m.quoted || !m.quoted.id || m.quoted.id === m.key?.id) {
+      return await m.send("_*Reply to the message you want to forward*_")
+    }
+    let jids = text.split(",").map(j => j.trim()).filter(j => j.length > 0)
+    if (jids.length === 0) return await m.send("_*No valid JIDs provided*_")
+
+    let q = m.quoted
+    let fwdCtx = { isForwarded: true, forwardingScore: 9999 }
+    let sentTo = []
+
+    let msgType = null
+    let msgContent = null
+    let mediaBuffer = null
+    if (q.image) {
+      msgType = "image"
+      try { mediaBuffer = await q.download() } catch (e) {
+        return await m.send("_*Failed to download image*_")
+      }
+    }
+    else if (q.video) {
+      msgType = "video"
+      try { mediaBuffer = await q.download() } catch (e) {
+        return await m.send("_*Failed to download video*_")
+      }
+    }
+    else if (q.audio) {
+      msgType = "audio"
+      try { mediaBuffer = await q.download() } catch (e) {
+        return await m.send("_*Failed to download audio*_")
+      }
+    }
+    else if (q.sticker) {
+      msgType = "sticker"
+      try { mediaBuffer = await q.download() } catch (e) {
+        return await m.send("_*Failed to download sticker*_")
+      }
+    }
+    else if (q.text || q.conversation) {
+      msgType = "text"
+      msgContent = q.text || q.conversation
+    }
+    else if (q.media || q.mimetype) {
+      msgType = "document"
+      try { mediaBuffer = await q.download() } catch (e) {
+        return await m.send("_*Failed to download file*_")
+      }
+    }
+    else {
+      return await m.send("_*Cannot forward this message type*_")
+    }
+  
+    for (let rawJid of jids) {
+      let jidd = rawJid
+      if (!jidd.includes("@")) {
+        jidd = `${jidd}@s.whatsapp.net`
+      }
+
+      try {
+        if (msgType === "text") {
+          await m.client.sendMessage(jidd, {
+            text: msgContent,
+            contextInfo: fwdCtx
+          })
+        }
+        else if (msgType === "image") {
+          await m.client.sendMessage(jidd, {
+            image: mediaBuffer,
+            caption: q.caption || "",
+            mimetype: q.mimetype,
+            contextInfo: fwdCtx
+          })
+        }
+        else if (msgType === "video") {
+          await m.client.sendMessage(jidd, {
+            video: mediaBuffer,
+            caption: q.caption || "",
+            mimetype: q.mimetype,
+            contextInfo: fwdCtx
+          })
+        }
+        else if (msgType === "audio") {
+          await m.client.sendMessage(jidd, {
+            audio: mediaBuffer,
+            mimetype: q.mimetype,
+            ptt: q.ptt || false,
+            contextInfo: fwdCtx
+          })
+        }
+        else if (msgType === "sticker") {
+          await m.client.sendMessage(jidd, {
+            sticker: mediaBuffer,
+            contextInfo: fwdCtx
+          })
+        }
+        else if (msgType === "document") {
+          await m.client.sendMessage(jidd, {
+            document: mediaBuffer,
+            mimetype: q.mimetype,
+            fileName: q.fileName || "file",
+            caption: q.caption || "",
+            contextInfo: fwdCtx
+          })
+        }
+
+        sentTo.push(jidd)
+
+      } catch (err) {
+        console.log(`Forward failed for ${jidd}:`, err.message)
+        continue
+      }
+    }
+    if (sentTo.length === 0) {
+      return await m.send("_*Failed to forward msg to JID*_")
+    }    
+    await m.send(`_Forwarded to ${sentTo}_\n`)
+
   } catch (e) {
-    console.log("cmd error", e)
+    console.log("forward cmd error:", e)
     return await m.sendErr(e)
   }
-})
+});
 
 kord({
   cmd: 'lastseen',

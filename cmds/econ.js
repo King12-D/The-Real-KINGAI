@@ -25,6 +25,9 @@ kord({
         if (!config().MONGODB_URI) {
             return await m.send("```You need to set MONGODB_URI in your config\nExample: setvar MONGODB_URI=your_mongodb_url```")
         }
+        if (config().MONGODB_URI) {
+    await edb.connect(config().MONGODB_URI)
+    }
         var edata = await getData("econ") || []
         const chat = m.chat
         if (text && text.toLowerCase() === "off") {
@@ -939,7 +942,7 @@ kord({
 }, async (m, text) => {
     try {
         if (!await econCheck(m.chat)) return await m.send("```💎 Economy is not active here.```")
-        const mentions = m.mentions || []
+        const mentions = m.mentionedJid || []
         const crew = [m.sender, ...mentions.filter(u => u !== m.sender)].slice(0, 4)
         if (crew.length < 2) return await m.send("```⚠️ Mention at least 1 partner for the heist!```")
         const targets = ["National Bank 🏦", "Museum 🏛️", "Casino Vault 🎰", "Jewelry Store 💍", "Government Treasury 🏛️"]
