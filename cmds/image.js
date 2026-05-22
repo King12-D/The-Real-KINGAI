@@ -1,5 +1,5 @@
 /* 
- * Copyright © 2025 Kenny
+ * Copyright © 2025 Mirage
  * This file is part of Kord and is licensed under the GNU GPLv3.
  * And I hope you know what you're doing here.
  * You may not use this file except in compliance with the License.
@@ -40,9 +40,9 @@ kord({
         await m.react("⏳")
         var mss = m.image ? m : m.quoted.image ? m.quoted : null
         var media = await m.client.downloadMediaMessage(m.image ? m : m.quoted.image ? m.quoted: null)
-        var pic = await upscaleImage(media, mss.mtype)
+        var pic = await upscaleImage(media)
         await m.react("")
-        return await m.send(pic, { caption: "> here's your upscaled image.." }, "image")
+        return await m.send(pic.url, { caption: "> here's your upscaled image.." }, "image")
         } catch (err) {
                 console.error(err)
                 return await m.send(`error ${err}`)
@@ -495,6 +495,11 @@ kord({
         }
 })
 
+const formatFileSize = bytes => {
+    if (bytes < 1024) return bytes + ' B'
+    else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+    else return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+}
 
 kord({
   cmd: "naturewlp",

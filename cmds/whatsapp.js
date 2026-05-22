@@ -1,5 +1,5 @@
 /* 
- * Copyright © 2025 Kenny
+ * Copyright © 2025 Mirage
  * This file is part of Kord and is licensed under the GNU GPLv3.
  * And I hope you know what you're doing here.
  * You may not use this file except in compliance with the License.
@@ -258,7 +258,7 @@ kord({
 }, async (m, text) => {
   try {
     q = text
-    if (!q) return await m.send(`_*provide a name to set!*_\n_Example: ${prefix}setname Kenny_`);
+    if (!q) return await m.send(`_*provide a name to set!*_\n_Example: ${prefix}setname Mirage_`);
     await m.client.updateProfileName(q);
     await m.reply(`_Profile name updated to ${q}_`);
   } catch (e) {
@@ -540,9 +540,20 @@ kord({
   }
 })
 
+function parseDuration(str) {
+  const match = str?.match(/^(\d+)(s|m|h|d)$/)
+  if (!match) return null
+  const val = parseInt(match[1])
+  const unit = match[2]
+  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 }
+  return val * multipliers[unit]
+}
+
+const muteTimers = new Map()
+
 kord({
   cmd: "mute-user",
-  desc: "mute a user or a sticker",
+  desc: "mute a user or a sticker. Use -t <duration> for timed mute (e.g. -t 10m, -t 1h)",
   fromMe: true,
   type: "bot",
   gc: true,
@@ -552,15 +563,56 @@ kord({
   if (!botAd) return await m.send("_*✘Bot Needs To Be Admin!*_")
 
   var _b = await getData("blacklisted") || {}
-  if (!_b[m.chat]) _b[m.chat] = { users: [], stk: [] }
+  if (!_b[m.chat]) _b[m.chat] = { users: [], stk: [], timers: {} }
+  if (!_b[m.chat].timers) _b[m.chat].timers = {}
 
   let bl = _b[m.chat]
 
+  let duration = null
+  let durationLabel = null
+
+  const timerMatch = text.match(/-t\s*(\d+[smhd])/)
+  if (timerMatch) {
+    durationLabel = timerMatch[1]
+    duration = parseDuration(durationLabel)
+    text = text.replace(timerMatch[0], '').trim()
+  } else {
+    const bareMatch = text.match(/\b(\d+[smhd])(\s|$)/)
+    if (bareMatch) {
+      durationLabel = bareMatch[1]
+      duration = parseDuration(durationLabel)
+      text = text.replace(bareMatch[0], '').trim()
+    }
+  }
+
   if (text.includes("-s")) {
-    if (!m.quoted.sticker) return await m.send("_reply to the sticker to mute_")
+    if (!m.quoted?.sticker) return await m.send("_reply to the sticker to mute_")
     var hash = m.quoted.fileSha256 ? Buffer.from(m.quoted.fileSha256).toString('hex') : null
     if (bl.stk.includes(hash)) return await m.send("_sticker is already muted_")
+
     bl.stk.push(hash)
+
+    if (duration) {
+      const timerKey = `${m.chat}::stk_${hash}`
+      if (muteTimers.has(timerKey)) {
+        clearTimeout(muteTimers.get(timerKey))
+        muteTimers.delete(timerKey)
+      }
+      bl.timers[`stk_${hash}`] = Date.now() + duration
+      const handle = setTimeout(async () => {
+        muteTimers.delete(timerKey)
+        var _fresh = await getData("blacklisted") || {}
+        if (!_fresh[m.chat]) return
+        _fresh[m.chat].stk = (_fresh[m.chat].stk || []).filter(h => h !== hash)
+        delete _fresh[m.chat].timers?.[`stk_${hash}`]
+        await storeData("blacklisted", _fresh)
+        await m.send(`_sticker auto-unmuted after timer_`)
+      }, duration)
+      muteTimers.set(timerKey, handle)
+      await storeData("blacklisted", _b)
+      return await m.send(`_sticker muted for ${durationLabel}_`)
+    }
+
     await storeData("blacklisted", _b)
     return await m.send("_sticker muted_")
   }
@@ -570,7 +622,30 @@ kord({
   let user = (input.includes('@') ? input.split('@')[0] : input).replace(/\D/g, '') + '@s.whatsapp.net'
   if (await isadminn(m, user)) return await m.send("User is an admin")
   if (bl.users.includes(user)) return await m.send("_User is already muted_")
+
   bl.users.push(user)
+
+  if (duration) {
+    const timerKey = `${m.chat}::${user}`
+    if (muteTimers.has(timerKey)) {
+      clearTimeout(muteTimers.get(timerKey))
+      muteTimers.delete(timerKey)
+    }
+    bl.timers[user] = Date.now() + duration
+    const handle = setTimeout(async () => {
+      muteTimers.delete(timerKey)
+      var _fresh = await getData("blacklisted") || {}
+      if (!_fresh[m.chat]) return
+      _fresh[m.chat].users = (_fresh[m.chat].users || []).filter(u => u !== user)
+      delete _fresh[m.chat].timers?.[user]
+      await storeData("blacklisted", _fresh)
+      await m.send(`@${user.split("@")[0]} has been auto-unmuted`, { mentions: [user] })
+    }, duration)
+    muteTimers.set(timerKey, handle)
+    await storeData("blacklisted", _b)
+    return await m.send(`@${user.split("@")[0]} has been muted for ${durationLabel}`, { mentions: [user] })
+  }
+
   await storeData("blacklisted", _b)
   return await m.send(`@${user.split("@")[0]} has been muted`, { mentions: [user] })
 })
@@ -591,12 +666,21 @@ kord({
   if (!_b[m.chat]) return await m.send("_no one muted here_")
 
   let bl = _b[m.chat]
+  if (!bl.timers) bl.timers = {}
 
   if (text.includes("-s")) {
-    if (!m.quoted.sticker) return await m.send("_reply to the sticker to unmute_")
+    if (!m.quoted?.sticker) return await m.send("_reply to the sticker to unmute_")
     var hash = m.quoted.fileSha256 ? Buffer.from(m.quoted.fileSha256).toString('hex') : null
     if (!bl.stk.includes(hash)) return await m.send("_sticker is not muted_")
+
+    const timerKey = `${m.chat}::stk_${hash}`
+    if (muteTimers.has(timerKey)) {
+      clearTimeout(muteTimers.get(timerKey))
+      muteTimers.delete(timerKey)
+    }
+
     bl.stk = bl.stk.filter(h => h !== hash)
+    delete bl.timers[`stk_${hash}`]
     await storeData("blacklisted", _b)
     return await m.send("_sticker unmuted_")
   }
@@ -606,11 +690,18 @@ kord({
   let user = (input.includes('@') ? input.split('@')[0] : input).replace(/\D/g, '') + '@s.whatsapp.net'
   if (await isadminn(m, user)) return await m.send("User is an admin")
   if (!bl.users.includes(user)) return await m.send("_User is not muted_")
+
+  const timerKey = `${m.chat}::${user}`
+  if (muteTimers.has(timerKey)) {
+    clearTimeout(muteTimers.get(timerKey))
+    muteTimers.delete(timerKey)
+  }
+
   bl.users = bl.users.filter(u => u !== user)
+  delete bl.timers[user]
   await storeData("blacklisted", _b)
   return await m.send(`@${user.split("@")[0]} has been unmuted`, { mentions: [user] })
 })
-
 
 kord({
   on: "all",
@@ -626,12 +717,33 @@ kord({
 
   var bl = data[m.chat]
 
+  if (bl.timers) {
+    const now = Date.now()
+    let changed = false
+
+    if (bl.timers[m.sender] && now >= bl.timers[m.sender]) {
+      bl.users = bl.users.filter(u => u !== m.sender)
+      delete bl.timers[m.sender]
+      changed = true
+    }
+
+    if (changed) await storeData("blacklisted", data)
+  }
+
   if (bl.users.includes(m.sender)) {
     return await m.send(m, {}, "delete")
   }
 
   if (m.mtype === "stickerMessage" && m.msg?.fileSha256) {
     const hash = Buffer.from(m.msg.fileSha256).toString("hex")
+
+    if (bl.timers?.[`stk_${hash}`] && Date.now() >= bl.timers[`stk_${hash}`]) {
+      bl.stk = bl.stk.filter(h => h !== hash)
+      delete bl.timers[`stk_${hash}`]
+      await storeData("blacklisted", data)
+      return
+    }
+
     if (bl.stk.includes(hash)) return await m.send(m, {}, "delete")
   }
 })

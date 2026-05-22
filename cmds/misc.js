@@ -171,16 +171,16 @@ cmd: "pickupl|pickupline",
 })
 
 kord({
-cmd: "breakupl|breakupline",
-  desc: "get breakupline",
+cmd: "wyr",
+  desc: "would you rather",
   fromMe: wtype,
   type: "fun",
 }, async (m, text) => {
   try {
-    var b = await m.axios("https://api.jcwyt.com/breakup")
+    var b = await m.axios("https://api.truthordarebot.xyz/v1/wyr")
     return await m.send(
-    `\`\`\`┏ BREAKUP-LINE ┓\`\`\`
-    \n\`\`\`${b}\`\`\``
+    `\`\`\`┏ WOULD-YOU-RATHER ┓\`\`\`
+    \n\`\`\`${b.question}\`\`\``
     )
   } catch (e) {
     console.log("cmd error", e)

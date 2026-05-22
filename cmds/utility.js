@@ -7,7 +7,7 @@
  * -------------------------------------------------------------------------------
  */
 
-const { kord, extractUrlsFromString, getJson, Baileys, talkNote, prefix, wtype, config, ss } = require("../core")
+const { kord, extractUrlsFromString, getJson, Baileys, transcribeATT, prefix, wtype, config, ss } = require("../core")
 const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit")
@@ -142,7 +142,7 @@ cmd: "audio2text|text",
   try {
     if (!(m.quoted.audio || m.quoted.video)) return await m.send("_reply to an audio or video_")
     var p = await m.client.dlandsave(m.quoted)
-    var t = await talkNote(p)
+    var t = await transcribeATT(p)
     var c = t.text
     await m.send(`${c}`)
     await require("fs").promises.unlink(p);
@@ -327,11 +327,11 @@ function getQ(q) {
   if (q?.mtype === 'audioMessage') return 'audio'
 
   const msg = q?.message || q
-  
+
   if (msg?.imageMessage) return 'image'
   if (msg?.videoMessage) return 'video'
   if (msg?.audioMessage) return 'audio'
-  
+
   return null
 }
 
@@ -352,23 +352,23 @@ kord({
 
     let mediaObj
     const type = getQ(m.quoted)
-    
+
     if (m.quoted?.mtype === 'viewOnceMessageV2') {
       if (type === 'image') mediaObj = m.quoted.message.imageMessage
       else if (type === 'video') mediaObj = m.quoted.message.videoMessage
       else if (type === 'audio') mediaObj = m.quoted.message.audioMessage
     }
-    
+
     if (!mediaObj) {
       if (type === 'image') mediaObj = m.quoted.imageMessage || m.quoted.message?.imageMessage
       else if (type === 'video') mediaObj = m.quoted.videoMessage || m.quoted.message?.videoMessage
       else if (type === 'audio') mediaObj = m.quoted.audioMessage || m.quoted.message?.audioMessage
     }
-    
+
     if (!mediaObj) mediaObj = m.quoted.message || m.quoted
 
     const damn = await m.client.dlandsave(mediaObj)
-    
+
     let msg
 
     if (type === 'image') {
@@ -418,19 +418,19 @@ kord({
 
       let mediaObj
       const type = getQ(m.quoted)
-      
+
       if (m.quoted?.mtype === 'viewOnceMessageV2') {
         if (type === 'image') mediaObj = m.quoted.message.imageMessage
         else if (type === 'video') mediaObj = m.quoted.message.videoMessage
         else if (type === 'audio') mediaObj = m.quoted.message.audioMessage
       }
-      
+
       if (!mediaObj) {
         if (type === 'image') mediaObj = m.quoted.imageMessage || m.quoted.message?.imageMessage
         else if (type === 'video') mediaObj = m.quoted.videoMessage || m.quoted.message?.videoMessage
         else if (type === 'audio') mediaObj = m.quoted.audioMessage || m.quoted.message?.audioMessage
       }
-      
+
       if (!mediaObj) mediaObj = m.quoted.message || m.quoted
 
       const damn = await m.client.dlandsave(mediaObj)

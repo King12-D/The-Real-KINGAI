@@ -1,5 +1,5 @@
 /* 
- * Copyright © 2025 Kenny
+ * Copyright © 2025 Mirage
  * This file is part of Kord and is licensed under the GNU GPLv3.
  * And I hope you know what you're doing here.
  * You may not use this file except in compliance with the License.
@@ -13,9 +13,9 @@ const { kord,
  gemini,
  chatgpt,
  getData,
+ storeData,
  chatbotResponse,
  clearChatHistory,
- storeData,
  prefix,
  commands
 } = require("../core")
@@ -277,7 +277,7 @@ kord({
 kord({
   on: "text",
   fromMe: false,
-}, async (m, text) => {
+}, async (m, text, x, store) => {
   try {
     const config = await getData("chatbot_cfg") || { global: false, activeChats: [] }
     if (!config) return
@@ -293,7 +293,7 @@ kord({
     }, 1000)
 
     try {
-      const response = await chatbotResponse(text, m.chat)
+      const response = await chatbotResponse(text, m.chat, m, m.client, store)
       clearInterval(typingInterval)
       
       if (response?.trim()) {
@@ -303,7 +303,7 @@ kord({
       clearInterval(typingInterval)
       console.error("AI response error:", error)
 
-      let errorMessage = "error.."
+      let errorMessage = "rate limit, try again."
 
       if (error.message.includes('timeout')) {
         errorMessage = "Response took too long, please try again"
@@ -318,20 +318,5 @@ kord({
   } catch (e) {
     console.log("cmd error", e)
     return await m.sendErr(e)
-  }
-})
-
-kord({
-  cmd: "aitest",
-  desc: "test AI connectivity",
-  fromMe: true,
-  type: "ai",
-}, async (m) => {
-  try {
-    const testMessage = "Hello, this is a test message"
-    const response = await getAIResponse({ chat: `test_${Date.now()}` }, null)
-    await m.send(`*AI Test Successful!*\n\n*Sent:* ${testMessage}\n*Response:* ${response}`)
-  } catch (error) {
-    await m.send(`*AI Test Failed:* ${error.message}`)
   }
 })
