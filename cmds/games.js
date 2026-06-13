@@ -1,13 +1,3 @@
-/* 
- * Copyright © 2025 Kenny
- * This file is part of Kord and is licensed under the GNU GPLv3.
- * And I hope you know what you're doing here.
- * You may not use this file except in compliance with the License.
- * See the LICENSE file or https://www.gnu.org/licenses/gpl-3.0.html
- * -------------------------------------------------------------------------------
- */
- 
- 
 const { kord, isAdmin, prefix, TicTacToe, WCG, wtype } = require("../core")
 
 kord({
@@ -142,6 +132,39 @@ const wordChainGames = {}
 let validWords = new Set()
 const messageProcessed = new Set()
 
+const DIFFICULTY_SETTINGS = {
+  easy: {
+    label: '🟢 EASY',
+    startLength: 3,
+    maxWordLength: 9,
+    wordLengthIncrement: 5,
+    maxAttempts: 7,
+    turnTimeLimitMin: 50,
+    turnTimeLimitMax: 70,
+    description: 'Start at 3 letters → max 9 | +1 every 5 words | 50–70s turns | 7 attempts'
+  },
+  medium: {
+    label: '🟡 MEDIUM',
+    startLength: 4,
+    maxWordLength: 12,
+    wordLengthIncrement: 3,
+    maxAttempts: 5,
+    turnTimeLimitMin: 30,
+    turnTimeLimitMax: 50,
+    description: 'Start at 4 letters → max 12 | +1 every 3 words | 30–50s turns | 5 attempts'
+  },
+  hard: {
+    label: '🔴 HARD',
+    startLength: 5,
+    maxWordLength: 15,
+    wordLengthIncrement: 2,
+    maxAttempts: 3,
+    turnTimeLimitMin: 20,
+    turnTimeLimitMax: 35,
+    description: 'Start at 5 letters → max 15 | +1 every 2 words | 20–35s turns | 3 attempts'
+  }
+}
+
 async function initWords() {
   try {
     const { default: wordList } = await import('word-list')
@@ -160,24 +183,30 @@ function clearWords() {
 }
 
 class WordChainGame {
-  constructor() {
+  constructor(difficulty = 'medium') {
+    this.difficulty = difficulty
+    const cfg = DIFFICULTY_SETTINGS[difficulty]
+
     this.players = []
     this.currentPlayerIndex = 0
     this.previousWord = ''
     this.wordChain = ''
     this.wordsCount = 0
-    this.wordLength = 3
-    this.maxWordLength = 7
-    this.wordLengthIncrement = 3
+    this.wordLength = cfg.startLength
+    this.maxWordLength = cfg.maxWordLength
+    this.wordLengthIncrement = cfg.wordLengthIncrement
+    this.maxAttempts = cfg.maxAttempts
+    this.turnTimeLimitMin = cfg.turnTimeLimitMin
+    this.turnTimeLimitMax = cfg.turnTimeLimitMax
+
     this.longestWordBy = 'No longest word yet'
     this.gameStatus = false
     this.waitingForPlayers = false
     this.botPlayer = false
     this.wrongAttempts = {}
-    this.maxAttempts = 5
-    this.turnTimeLimit = 45
+    this.turnTimeLimit = cfg.turnTimeLimitMin
     this.turnStartTime = 0
-    this.currentRemTime = 45
+    this.currentRemTime = cfg.turnTimeLimitMin
     this.turnIntervalId = null
     this.waitingTimeoutId = null
     this.validWords = validWords
@@ -215,6 +244,10 @@ class WordChainGame {
     return alphabet[Math.floor(Math.random() * alphabet.length)]
   }
 
+  randomTurnTime() {
+    return Math.floor(Math.random() * (this.turnTimeLimitMax - this.turnTimeLimitMin + 1)) + this.turnTimeLimitMin
+  }
+
   async startWaitingTimer(m) {
     this.waitingTimeoutId = setTimeout(async () => {
       if (this.gameEnded) return
@@ -236,19 +269,22 @@ class WordChainGame {
     this.botPlayer = true
     this.turnStartTime = Date.now()
     this.finalWarningShown = false
-    
+
     this.players.forEach(player => {
       this.wrongAttempts[player] = 0
     })
-    
+
     this.previousWord = this.getRandomLetter()
     this.wordChain = this.previousWord
     this.currentPlayerIndex = 0
-    this.turnTimeLimit = Math.floor(Math.random() * 21) + 30
-    
+    this.turnTimeLimit = this.randomTurnTime()
+
+    const cfg = DIFFICULTY_SETTINGS[this.difficulty]
     const playerList = this.players.map((p, i) => `${i + 1}. @${p.split('@')[0]}`).join('\n')
-    
+
     await m.send(`\`\`\`🚀 WORD CHAIN GAME STARTED!\`\`\`
+
+${cfg.label} MODE
 
 👥 *Players (${this.players.length}):*
 ${playerList}
@@ -259,16 +295,18 @@ ${playerList}
 📏 *Min length:* ${this.wordLength} letters
 ⏱️ *Time limit:* ${this.turnTimeLimit}s
 
-🔥 *Rules:*
-• Length increases every ${this.wordLengthIncrement} words
-• Max ${this.maxAttempts} wrong attempts per player
+📊 *Difficulty Rules:*
+${cfg.description}
+
+🔥 *General Rules:*
 • Must start with last letter of previous word
 • Only single words allowed
+• Max ${this.maxAttempts} wrong attempts per player
 
 _Let the word battle begin!_`, {
       mentions: this.players
     })
-    
+
     this.startTurn(m)
     await this.wait(2)
   }
@@ -276,20 +314,26 @@ _Let the word battle begin!_`, {
   async startTurn(m) {
     if (this.gameEnded) return
     this.finalWarningShown = false
-    
+
+    // Stop any existing interval before starting a new one
+    if (this.turnIntervalId) {
+      clearInterval(this.turnIntervalId)
+      this.turnIntervalId = null
+    }
+
     this.turnIntervalId = setInterval(async () => {
       if (this.gameEnded) {
         this.stopTurn()
         return
       }
-      
+
       const elapsed = Math.floor((Date.now() - this.turnStartTime) / 1000)
       this.currentRemTime = this.turnTimeLimit - elapsed
 
       if (this.currentRemTime <= 0 && this.gameStatus && !this.processingTurn) {
         this.processingTurn = true
         this.botPlayer = true
-        
+
         if (this.players.length >= 2) {
           await m.send(`\`\`\`⏰ TIME'S UP!\`\`\`
 
@@ -298,12 +342,12 @@ _Let the word battle begin!_`, {
 *Game continues with remaining players*`, {
             mentions: [this.currentPlayer]
           })
-          
+
           this.players.splice(this.currentPlayerIndex, 1)
           if (this.currentPlayerIndex >= this.players.length) {
             this.currentPlayerIndex = 0
           }
-          
+
           if (this.players.length === 1) {
             await m.send(`\`\`\`🎉 GAME OVER!\`\`\`
 
@@ -317,18 +361,18 @@ _Let the word battle begin!_`, {
 🔗 *Chain:* ${this.wordChain}`, {
               mentions: [this.players[0]]
             })
-            
+
             this.gameEnded = true
             this.stopTurn()
             clearWords()
             delete wordChainGames[m.chat]
             return
           }
-          
-          this.turnTimeLimit = Math.floor(Math.random() * 21) + 30
+
+          this.turnTimeLimit = this.randomTurnTime()
           this.turnStartTime = Date.now()
           this.processingTurn = false
-          
+
           await m.send(`\`\`\`🎯 NEXT PLAYER'S TURN!\`\`\`
 
 @${this.currentPlayer.split('@')[0]} - your turn!
@@ -340,7 +384,7 @@ _Let the word battle begin!_`, {
 *Game continues!*`, {
             mentions: [this.currentPlayer]
           })
-          
+
           this.startTurn(m)
         } else {
           await m.send(`\`\`\`❌ GAME TERMINATED\`\`\`
@@ -377,86 +421,102 @@ kord({
   type: 'game'
 }, async (m, text) => {
   try {
-  if (m.isBot) return
-  
-  const chat = m.chat
-  let game = wordChainGames[chat]
+    if (m.isBot) return
 
-  if (text.startsWith('end') && game) {
-    game.gameEnded = true
-    game.stopTurn()
-    clearWords()
-    delete wordChainGames[chat]
-    return await m.send(`\`\`\`🎮 GAME ENDED\`\`\`
+    const chat = m.chat
+    let game = wordChainGames[chat]
+
+    if (text.startsWith('end') && game) {
+      game.gameEnded = true
+      game.stopTurn()
+      clearWords()
+      delete wordChainGames[chat]
+      return await m.send(`\`\`\`🎮 GAME ENDED\`\`\`
 
 Successfully terminated the game
 
 _See you next time!_`)
-  }
+    }
 
-  if (text.startsWith('start') && game && game.waitingForPlayers) {
-    if (game.players.length < 2) {
-      return await m.send(`\`\`\`❌ NOT ENOUGH PLAYERS\`\`\`
+    if (text.startsWith('start') && game && game.waitingForPlayers) {
+      if (game.players.length < 2) {
+        return await m.send(`\`\`\`❌ NOT ENOUGH PLAYERS\`\`\`
 
 Need at least 2 players to start the game`)
+      }
+      return await game.startGame(m)
     }
-    return await game.startGame(m)
-  }
 
-  if (game && game.gameStatus) {
-    return await m.send(`\`\`\`⚠️ GAME ALREADY RUNNING\`\`\`
+    if (game && game.gameStatus) {
+      return await m.send(`\`\`\`⚠️ GAME ALREADY RUNNING\`\`\`
 
 A game is currently in progress
 
 🛑 Stop game: *${prefix}wcg end*`)
-  }
-
-  const opponent = m.quoted ? m.quoted.sender : m.mentionedJid ? m.mentionedJid[0] : false
-
-  if (!game) {
-    await initWords()
-    game = new WordChainGame()
-    wordChainGames[chat] = game
-  }
-
-  if (!game.players.includes(m.sender)) {
-    if (game.players.length >= 5) {
-      return await m.send(`\`\`\`🚫 ROOM FULL\`\`\`
-
-Maximum 5 players allowed per game`)
     }
-    
-    game.players.push(m.sender)
-    
-    if (opponent && opponent !== m.sender && !game.players.includes(opponent)) {
+
+    // Parse difficulty from text (default: medium)
+    let difficulty = 'medium'
+    const textLower = text.trim().toLowerCase()
+    if (textLower === 'easy' || textLower.startsWith('easy ')) difficulty = 'easy'
+    else if (textLower === 'hard' || textLower.startsWith('hard ')) difficulty = 'hard'
+    else if (textLower === 'medium' || textLower.startsWith('medium ')) difficulty = 'medium'
+
+    const opponent = m.quoted ? m.quoted.sender : m.mentionedJid ? m.mentionedJid[0] : false
+
+    if (!game) {
+      await initWords()
+      game = new WordChainGame(difficulty)
+      wordChainGames[chat] = game
+    }
+
+    if (!game.players.includes(m.sender)) {
       if (game.players.length >= 5) {
         return await m.send(`\`\`\`🚫 ROOM FULL\`\`\`
 
 Maximum 5 players allowed per game`)
       }
-      game.players.push(opponent)
-    }
-  }
 
-  if (game.players.length === 1) {
-    game.waitingForPlayers = true
-    game.startWaitingTimer(m)
-    return await m.send(`\`\`\`🎮 WORD CHAIN GAME\`\`\`
+      game.players.push(m.sender)
+
+      if (opponent && opponent !== m.sender && !game.players.includes(opponent)) {
+        if (game.players.length >= 5) {
+          return await m.send(`\`\`\`🚫 ROOM FULL\`\`\`
+
+Maximum 5 players allowed per game`)
+        }
+        game.players.push(opponent)
+      }
+    }
+
+    const cfg = DIFFICULTY_SETTINGS[game.difficulty]
+
+    if (game.players.length === 1) {
+      game.waitingForPlayers = true
+      game.startWaitingTimer(m)
+      return await m.send(`\`\`\`🎮 WORD CHAIN GAME\`\`\`
+
+${cfg.label} MODE
 
 👤 *Player:* @${game.players[0].split('@')[0]}
+
+📊 *Difficulty:*
+${cfg.description}
 
 ⏳ *Waiting for more players...*
 
 🎯 Type *${prefix}wcg* or *"join"* to join (max 5 players)
 🚀 Type *${prefix}wcg start* to start with current players
 ⏱️ *Auto-start in 30 seconds* if 2+ players`, {
-      mentions: game.players
-    })
-  } else {
-    const playerList = game.players.map((p, i) => `${i + 1}. @${p.split('@')[0]}`).join('\n')
-    
-    if (game.waitingForPlayers) {
-      return await m.send(`\`\`\`🎮 PLAYERS UPDATED\`\`\`
+        mentions: game.players
+      })
+    } else {
+      const playerList = game.players.map((p, i) => `${i + 1}. @${p.split('@')[0]}`).join('\n')
+
+      if (game.waitingForPlayers) {
+        return await m.send(`\`\`\`🎮 PLAYERS UPDATED\`\`\`
+
+${cfg.label} MODE
 
 👥 *Current Players (${game.players.length}/5):*
 ${playerList}
@@ -464,12 +524,12 @@ ${playerList}
 🎯 Type *${prefix}wcg* or *"join"* to join
 🚀 Type *${prefix}wcg start* to begin
 ⏱️ *Auto-start in a few seconds*`, {
-        mentions: game.players
-      })
-    } else {
-      return await game.startGame(m)
+          mentions: game.players
+        })
+      } else {
+        return await game.startGame(m)
+      }
     }
-  }
   } catch (e) {
     console.log("cmd error", e)
     return await m.sendErr(e)
@@ -483,30 +543,30 @@ kord({
   type: 'game'
 }, async (m) => {
   try {
-  if (m.isBot) return
-  
-  const chat = m.chat
-  const game = wordChainGames[chat]
-  const isOwner = m.isCreator || await isAdmin(m) || (game && game.players.includes(m.sender))
+    if (m.isBot) return
 
-  if (!game) {
-    return await m.send(`\`\`\`❌ NO ACTIVE GAME\`\`\`
+    const chat = m.chat
+    const game = wordChainGames[chat]
+    const isOwner = m.isCreator || await isAdmin(m) || (game && game.players.includes(m.sender))
+
+    if (!game) {
+      return await m.send(`\`\`\`❌ NO ACTIVE GAME\`\`\`
 
 No Word Chain game is running in this chat`)
-  }
+    }
 
-  if (!isOwner) {
-    return await m.send(`\`\`\`🚫 ACCESS DENIED\`\`\`
+    if (!isOwner) {
+      return await m.send(`\`\`\`🚫 ACCESS DENIED\`\`\`
 
 Only participants or admins can delete the game`)
-  }
+    }
 
-  game.gameEnded = true
-  game.stopTurn()
-  clearWords()
-  delete wordChainGames[chat]
+    game.gameEnded = true
+    game.stopTurn()
+    clearWords()
+    delete wordChainGames[chat]
 
-  return await m.send(`\`\`\`🗑️ GAME DELETED\`\`\`
+    return await m.send(`\`\`\`🗑️ GAME DELETED\`\`\`
 
 *Room:* wcg-${chat.split('@')[0]}
 
@@ -525,36 +585,39 @@ kord({
   fromMe: false
 }, async (m, text) => {
   try {
-  if (m.isBot) return
+    if (m.isBot) return
 
-  const chat = m.chat
-  const game = wordChainGames[chat]
-  const sender = m.sender
-  const message = text.trim().toLowerCase()
-  
-  const messageId = `${sender}-${Date.now()}-${text}`
-  if (messageProcessed.has(messageId)) return
-  messageProcessed.add(messageId)
-  
-  setTimeout(() => messageProcessed.delete(messageId), 5000)
+    const chat = m.chat
+    const game = wordChainGames[chat]
+    const sender = m.sender
+    const message = text.trim().toLowerCase()
 
-  if (game && game.waitingForPlayers && message == 'join') {
-    if (game.players.includes(sender)) {
-      return await m.send(`\`\`\`✅ ALREADY JOINED\`\`\`
+    const messageId = `${sender}-${Date.now()}-${text}`
+    if (messageProcessed.has(messageId)) return
+    messageProcessed.add(messageId)
+
+    setTimeout(() => messageProcessed.delete(messageId), 5000)
+
+    if (game && game.waitingForPlayers && message == 'join') {
+      if (game.players.includes(sender)) {
+        return await m.send(`\`\`\`✅ ALREADY JOINED\`\`\`
 
 You're already in the game!`)
-    }
-    
-    if (game.players.length >= 5) {
-      return await m.send(`\`\`\`🚫 ROOM FULL\`\`\`
+      }
+
+      if (game.players.length >= 5) {
+        return await m.send(`\`\`\`🚫 ROOM FULL\`\`\`
 
 Maximum 5 players allowed per game`)
-    }
-    
-    game.players.push(sender)
-    const playerList = game.players.map((p, i) => `${i + 1}. @${p.split('@')[0]}`).join('\n')
-    
-    return await m.send(`\`\`\`🎮 PLAYER JOINED\`\`\`
+      }
+
+      game.players.push(sender)
+      const playerList = game.players.map((p, i) => `${i + 1}. @${p.split('@')[0]}`).join('\n')
+      const cfg = DIFFICULTY_SETTINGS[game.difficulty]
+
+      return await m.send(`\`\`\`🎮 PLAYER JOINED\`\`\`
+
+${cfg.label} MODE
 
 👥 *Current Players (${game.players.length}/5):*
 ${playerList}
@@ -562,45 +625,147 @@ ${playerList}
 🎯 Type *"join"* to join
 🚀 Type *${prefix}wcg start* to begin
 ⏱️ *Auto-start soon*`, {
-      mentions: game.players
-    })
-  }
+        mentions: game.players
+      })
+    }
 
-  if (!game || !game.gameStatus || game.currentPlayer !== sender || !text || game.botPlayer || game.processingTurn || game.gameEnded) return
+    if (!game || !game.gameStatus || game.currentPlayer !== sender || !text || game.botPlayer || game.processingTurn || game.gameEnded) return
 
-  game.processingTurn = true
-  const inputWords = text.trim().split(/\s+/)
-  
-  if (inputWords.length > 1) {
-    game.processingTurn = false
-    return await m.send(`\`\`\`❌ MULTIPLE WORDS NOT ALLOWED\`\`\`
+    game.processingTurn = true
+    const inputWords = text.trim().split(/\s+/)
+
+    if (inputWords.length > 1) {
+      game.processingTurn = false
+      return await m.send(`\`\`\`❌ MULTIPLE WORDS NOT ALLOWED\`\`\`
 
 Please use only single words
 
 @${game.currentPlayer.split('@')[0]}'s turn continues
 ⏱️ *Time left:* ${game.currentRemTime}s`, {
-      mentions: [game.currentPlayer]
-    })
-  }
-  
-  const word = inputWords[0].toLowerCase()
+        mentions: [game.currentPlayer]
+      })
+    }
 
-  if (word.length >= game.wordLength && word[0] === game.previousWord.slice(-1)) {
-    const verifyMsg = await m.send(`\`\`\`🔍 VERIFYING WORD...\`\`\``)
-    
-    if (!game.validWords || !game.validWords.has(word)) {
-      await verifyMsg.edit(`\`\`\`❌ INVALID WORD\`\`\`
+    const word = inputWords[0].toLowerCase()
+
+    if (word.length >= game.wordLength && word[0] === game.previousWord.slice(-1)) {
+      const verifyMsg = await m.send(`\`\`\`🔍 VERIFYING WORD...\`\`\``)
+
+      if (!game.validWords || !game.validWords.has(word)) {
+        await verifyMsg.edit(`\`\`\`❌ INVALID WORD\`\`\`
 
 Word not found in dictionary`)
-      
+
+        game.wrongAttempts[sender] = (game.wrongAttempts[sender] || 0) + 1
+
+        if (game.wrongAttempts[sender] >= game.maxAttempts) {
+          game.players.splice(game.currentPlayerIndex, 1)
+          if (game.currentPlayerIndex >= game.players.length) {
+            game.currentPlayerIndex = 0
+          }
+
+          if (game.players.length === 1) {
+            game.stopTurn()
+            game.gameEnded = true
+            clearWords()
+            delete wordChainGames[chat]
+            game.processingTurn = false
+            return await m.send(`\`\`\`🎉 GAME OVER!\`\`\`
+
+🏆 *Winner:* @${game.players[0].split('@')[0]}
+
+💀 @${sender.split('@')[0]} exceeded max attempts (${game.wrongAttempts[sender]})
+
+🔗 *Final chain:* ${game.wordChain}`, {
+              mentions: [sender, game.players[0]]
+            })
+          } else {
+            await m.send(`\`\`\`💀 PLAYER ELIMINATED!\`\`\`
+
+@${sender.split('@')[0]} exceeded max attempts (${game.wrongAttempts[sender]})
+
+*${game.players.length} players remaining*
+
+🎯 *Current Turn:* @${game.currentPlayer.split('@')[0]}
+📝 *Start with:* "${game.previousWord.slice(-1)}"
+📏 *Min length:* ${game.wordLength} letters
+⏱️ *Time limit:* ${game.turnTimeLimit}s`, {
+              mentions: [sender, game.currentPlayer]
+            })
+            game.turnTimeLimit = game.randomTurnTime()
+            game.turnStartTime = Date.now()
+            game.processingTurn = false
+            game.startTurn(m)
+            return
+          }
+        }
+
+        game.processingTurn = false
+        return await m.send(`\`\`\`❎ WORD REJECTED\`\`\`
+
+*Reason:* Not a valid dictionary word
+*Attempts left:* ${game.maxAttempts - game.wrongAttempts[sender]}
+
+@${game.currentPlayer.split('@')[0]}'s turn continues
+⏱️ *Time left:* ${game.currentRemTime}s`, {
+          mentions: [game.currentPlayer]
+        })
+      }
+
+      await verifyMsg.edit(`\`\`\`✅ WORD VERIFIED\`\`\``)
+
+      if (word.length > (game.longestWordBy.includes('No longest') ? game.wordLength - 1 : parseInt(game.longestWordBy.match(/\((\d+)\)/)[1]))) {
+        game.longestWordBy = `Longest word (${word.length}): "${word}" by @${sender.split('@')[0]}`
+      }
+
+      game.wordsCount++
+      game.botPlayer = true
+      game.stopTurn()
+      game.previousWord = word
+      game.wordChain += ` → ${word}`
+      game.turnTimeLimit = game.randomTurnTime()
+
+      if (game.wordsCount % game.wordLengthIncrement === 0 && game.wordLength < game.maxWordLength) {
+        game.wordLength++
+      }
+
+      await m.react("✅")
+      game.nextPlayer()
+
+      const nextPlayerIndex = game.currentPlayerIndex < game.players.length - 1 ? game.currentPlayerIndex + 1 : 0
+      const nextPlayer = game.players[nextPlayerIndex]
+
+      const levelUp = (game.wordsCount % game.wordLengthIncrement === 0 && game.wordLength <= game.maxWordLength)
+        ? `\n🔥 *Level Up!* Min length now: ${game.wordLength} letters` : ''
+
+      const msg = `\`\`\`✅ WORD ACCEPTED!\`\`\`
+
+🎯 *Current Turn:* @${game.currentPlayer.split('@')[0]}
+⏭️ *Next:* @${nextPlayer.split('@')[0]}
+
+📝 *Start with:* "${game.previousWord.slice(-1)}"
+📏 *Min length:* ${game.wordLength} letters
+⏱️ *Time limit:* ${game.turnTimeLimit}s
+📊 *Total words:* ${game.wordsCount}${levelUp}`
+
+      game.turnStartTime = Date.now()
+      game.processingTurn = false
+      game.startTurn(m)
+      await game.wait(2)
+      return await m.send(msg, { mentions: game.players })
+
+    } else {
+      game.botPlayer = true
+      await m.react("❌")
+
       game.wrongAttempts[sender] = (game.wrongAttempts[sender] || 0) + 1
-      
+
       if (game.wrongAttempts[sender] >= game.maxAttempts) {
         game.players.splice(game.currentPlayerIndex, 1)
         if (game.currentPlayerIndex >= game.players.length) {
           game.currentPlayerIndex = 0
         }
-        
+
         if (game.players.length === 1) {
           game.stopTurn()
           game.gameEnded = true
@@ -629,132 +794,32 @@ Word not found in dictionary`)
 ⏱️ *Time limit:* ${game.turnTimeLimit}s`, {
             mentions: [sender, game.currentPlayer]
           })
-          game.turnTimeLimit = Math.floor(Math.random() * 21) + 30
+          game.turnTimeLimit = game.randomTurnTime()
           game.turnStartTime = Date.now()
           game.processingTurn = false
           game.startTurn(m)
           return
         }
       }
-      
-      game.processingTurn = false
-      return await m.send(`\`\`\`❎ WORD REJECTED\`\`\`
 
-*Reason:* Not a valid dictionary word
+      const reason = word[0] !== game.previousWord.slice(-1)
+        ? `Must start with "${game.previousWord.slice(-1)}"`
+        : `Must be at least ${game.wordLength} letters`
 
-@${game.currentPlayer.split('@')[0]}'s turn continues
-⏱️ *Time left:* ${game.currentRemTime}s`, {
-        mentions: [game.currentPlayer]
-      })
-    }
-
-    await verifyMsg.edit(`\`\`\`✅ WORD VERIFIED\`\`\``)
-    
-    if (word.length > (game.longestWordBy.includes('No longest') ? game.wordLength - 1 : parseInt(game.longestWordBy.match(/\((\d+)\)/)[1]))) {
-      game.longestWordBy = `Longest word (${word.length}): "${word}" by @${sender.split('@')[0]}`
-    }
-
-    game.wordsCount++
-    game.botPlayer = true
-    game.stopTurn()
-    game.previousWord = word
-    game.wordChain += ` → ${word}`
-    game.turnTimeLimit = Math.floor(Math.random() * 21) + 30
-    
-    if (game.wordsCount % game.wordLengthIncrement === 0 && game.wordLength < game.maxWordLength) {
-      game.wordLength++
-    }
-    
-    await m.react("✅")
-    game.nextPlayer()
-    
-    const nextPlayerIndex = game.currentPlayerIndex < game.players.length - 1 ? game.currentPlayerIndex + 1 : 0
-    const nextPlayer = game.players[nextPlayerIndex]
-
-    const levelUp = (game.wordsCount % game.wordLengthIncrement === 0 && game.wordLength <= game.maxWordLength) 
-      ? `\n🔥 *Level Up!* Min length now: ${game.wordLength}` : ''
-    
-    const msg = `\`\`\`✅ WORD ACCEPTED!\`\`\`
-
-🎯 *Current Turn:* @${game.currentPlayer.split('@')[0]}
-⏭️ *Next:* @${nextPlayer.split('@')[0]}
-
-📝 *Start with:* "${game.previousWord.slice(-1)}"
-📏 *Min length:* ${game.wordLength} letters
-⏱️ *Time limit:* ${game.turnTimeLimit}s
-📊 *Total words:* ${game.wordsCount}${levelUp}`
-    
-    game.turnStartTime = Date.now()
-    game.processingTurn = false
-    game.startTurn(m)
-    await game.wait(2)
-    return await m.send(msg, { mentions: game.players })
-    
-  } else {
-    game.botPlayer = true
-    await m.react("❌")
-
-    game.wrongAttempts[sender] = (game.wrongAttempts[sender] || 0) + 1
-
-    if (game.wrongAttempts[sender] >= game.maxAttempts) {
-      game.players.splice(game.currentPlayerIndex, 1)
-      if (game.currentPlayerIndex >= game.players.length) {
-        game.currentPlayerIndex = 0
-      }
-      
-      if (game.players.length === 1) {
-        game.stopTurn()
-        game.gameEnded = true
-        clearWords()
-        delete wordChainGames[chat]
-        game.processingTurn = false
-        return await m.send(`\`\`\`🎉 GAME OVER!\`\`\`
-
-🏆 *Winner:* @${game.players[0].split('@')[0]}
-
-💀 @${sender.split('@')[0]} exceeded max attempts (${game.wrongAttempts[sender]})
-
-🔗 *Final chain:* ${game.wordChain}`, {
-          mentions: [sender, game.players[0]]
-        })
-      } else {
-        await m.send(`\`\`\`💀 PLAYER ELIMINATED!\`\`\`
-
-@${sender.split('@')[0]} exceeded max attempts (${game.wrongAttempts[sender]})
-
-*${game.players.length} players remaining*
-
-🎯 *Current Turn:* @${game.currentPlayer.split('@')[0]}
-📝 *Start with:* "${game.previousWord.slice(-1)}"
-📏 *Min length:* ${game.wordLength} letters
-⏱️ *Time limit:* ${game.turnTimeLimit}s`, {
-          mentions: [sender, game.currentPlayer]
-        })
-        game.turnTimeLimit = Math.floor(Math.random() * 21) + 30
-        game.turnStartTime = Date.now()
-        game.processingTurn = false
-        game.startTurn(m)
-        return
-      }
-    }
-
-    const reason = word[0] !== game.previousWord.slice(-1) 
-      ? `Must start with "${game.previousWord.slice(-1)}"` 
-      : `Must be at least ${game.wordLength} letters`
-    
-    const msg = `\`\`\`❎ INVALID WORD\`\`\`
+      const msg = `\`\`\`❎ INVALID WORD\`\`\`
 
 *Reason:* ${reason}
+*Attempts left:* ${game.maxAttempts - game.wrongAttempts[sender]}
 
 @${game.currentPlayer.split('@')[0]}'s turn continues
 ⏱️ *Time left:* ${game.currentRemTime}s
 
 *Try again!*`
-    
-    game.processingTurn = false
-    await game.wait(2)
-    return await m.send(msg, { mentions: [game.currentPlayer] })
-  }
+
+      game.processingTurn = false
+      await game.wait(2)
+      return await m.send(msg, { mentions: [game.currentPlayer] })
+    }
   } catch (e) {
     console.log("wcg error", e)
   }

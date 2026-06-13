@@ -1,5 +1,5 @@
 /* 
- * Copyright © 2025 Kenny
+ * Copyright © 2025 Mirage
  * This file is part of Kord and is licensed under the GNU GPLv3.
  * And I hope you know what you're doing here.
  * You may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@ const { kord,
   audioCut,
   ytaudio,
   ytvideo,
+  imgWlp,
   prefix,
   searchYahoo } = require("../core")
 const gis = require('g-i-s')
@@ -69,20 +70,19 @@ kord({
 }, async (m, text) => {
         let q = text || m.quoted?.text
         if (!q) return m.send("_*Reply to a message or provide a search query!*_")
+        const match = q.match(/^(\d+)\s+(.+)/)
+        const count = match ? Math.min(parseInt(match[1]), 10) : 1
+        q = match ? match[2] : q
+
         m.react("⏳")
-        const opt = {
-                searchTerm: q,
-                queryStringAddition: '&safe=false',
-                filterOutDomains: ['deviantart.com']
-        }
         try {
-                const imgs = await gisPromise(opt)
+                const imgs = await imgWlp(q)
                 if (!imgs || imgs.length === 0) return m.send("_Sorry, I found nothing..._")
-                const selected = imgs.slice(0, 3)
+                const selected = imgs.slice(0, count)
                 for (let img of selected) {
-                        await m.send(img.url, {}, "image")
+                        await m.send(img, {}, "image")
                 }
-        m.react("")
+                m.react("")
         } catch (err) {
                 console.error(err)
                 m.send("_Failed to fetch images._")
@@ -99,12 +99,12 @@ kord({
         if (!text) return m.send(`_*provide a npm package*_\n_Example: ${prefix}npm axios`)
         var n = await npmstalk(text)
         return m.send(`\`\`\`❏ NPM PACKAGE INFO ❏ 
-➥ _*Name:*_ ${name}
-➥ _*Lastest Version:*_ ${versionLatest}
-➥ _*Published Version:*_ ${versionPublish}
-➥ _*Published Time:*_ ${publishTime}
-➥ _*Latest Published Time:*_ ${latestPublishTime}
-➥ _*Latest Dependencies:*_ ${latestDependencies}\`\`\``)
+➥ _*Name:*_ ${n.name}
+➥ _*Lastest Version:*_ ${n.versionLatest}
+➥ _*Published Version:*_ ${n.versionPublish}
+➥ _*Published Time:*_ ${n.publishTime}
+➥ _*Latest Published Time:*_ ${n.latestPublishTime}
+➥ _*Latest Dependencies:*_ ${n.latestDependencies}\`\`\``)
 })
 
 

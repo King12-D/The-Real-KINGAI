@@ -1,5 +1,5 @@
 /* 
- * Copyright © 2025 Kenny
+ * Copyright © 2025 Mirage
  * This file is part of Kord and is licensed under the GNU GPLv3.
  * And I hope you know what you're doing here.
  * You may not use this file except in compliance with the License.
@@ -7,7 +7,7 @@
  * -------------------------------------------------------------------------------
  */
 
-const { kord, wtype, prefix, sleep, extractUrlsFromString, fb, ytaudio, config, ytvideo, xdl, tt, insta, mediaFire, rand, getBuffer } = require("../core")
+const { kord, wtype, prefix, sleep, extractUrlsFromString, fb, ytaudio, config, ytvideo, xdl, tt, insta, mediaFire, rand, gdrive, getBuffer } = require("../core")
 const yts = require("yt-search")
 const { Sticker, StickerTypes } = require("wa-sticker-formatter");
 
@@ -336,17 +336,7 @@ kord({
         var cap = `00:00 ───◁ㅤ ❚❚ ㅤ▷─── ${ytsa.duration.timestamp} ♡`
         m.react("")
         return await m.send(dl.url, {ptt: false,
-            mimetype: 'audio/mpeg',
-            contextInfo: {
-              externalAdReply: {
-                title: ytsa.title,
-                body: cap,
-                mediaType: 1,
-                renderLargerThumbnail: false,
-                thumbnailUrl: ytsa.thumbnail,
-                sourceUrl: ytsa.url
-              }
-            }
+            mimetype: 'audio/mpeg'
             }, "audio")
             } catch (err) {
         console.error(err)
@@ -400,17 +390,7 @@ kord({
         return await m.send(dl.url, {ptt: false,
             mimetype: 'audio/mpeg',
             fileName: `${ytsa.title}.mp3`,
-            caption: ytsa.title,
-            contextInfo: {
-              externalAdReply: {
-                title: ytsa.title,
-                body: cap,
-                mediaType: 1,
-                renderLargerThumbnail: false,
-                thumbnailUrl: ytsa.thumbnail,
-                sourceUrl: ytsa.url
-              }
-            }
+            caption: ytsa.title
             }, "document")
         } catch (err) {
         console.error(err)
@@ -687,34 +667,115 @@ kord({
         type: "downloader",
 }, async (m, text) => {
         try {
-        let lik;
-if (!text) {
-        lik = m.quoted?.text
-} else {
-        lik = text
-}
-if (!lik) return m.send("_*reply/provide a mediafire link!*_")
-m.react("⏰")
-var links = await extractUrlsFromString(lik)
-const mfregex = /^(https?:\/\/)?(www\.)?(mediafire\.com)\/.+$/;
-var link = links.find(url => mfregex.test(url));
-        const mfdl = await mediaFire(link)
-var filename = mfdl.title
-var size = mfdl.size
-var timeDate = `${mfdl.time} - ${mfdl.date}`
-var  dlLink = mfdl.url
-var caption = `*❦ ᴍ ᴇ ᴅ ɪ ᴀ ꜰ ɪ ʀ ᴇ • ᴅ ᴏ ᴡ ɴ ʟ ᴏ ᴀ ᴅ ᴇ ʀ ❦*
+          let lik
+                
+                if (!text) {
+                        lik = m.quoted?.text
+                } else {
+                        lik = text
+                }
+
+                if (!lik) return m.send("_*reply/provide a mediafire link!*_")
+
+                m.react("⏰")
+
+                const links = await extractUrlsFromString(lik)
+
+                const mfregex = /^(https?:\/\/)?(www\.)?(mediafire\.com)\/.+$/i
+
+                const link = links.find(url => mfregex.test(url))
+
+                if (!link) {
+                        m.react("")
+                        return m.send("_*invalid mediafire link!*_")
+                }
+
+                const mfdl = await mediaFire(link)
+
+                const filename = mfdl.filename
+                const size = mfdl.size || "Unknown"
+                const uploaded = mfdl.uploadedText || "Unknown"
+                const dlLink = mfdl.directUrl
+
+                const caption = `*❦ ᴍ ᴇ ᴅ ɪ ᴀ ꜰ ɪ ʀ ᴇ • ᴅ ᴏ ᴡ ɴ ʟ ᴏ ᴀ ᴅ ᴇ ʀ ❦*
 ➠ *FileName:* ${filename}
 ➠ *File Size:* ${size}
-➠ *File Date:* ${timeDate}
+➠ *Uploaded:* ${uploaded}
 
 ${config().CAPTION}`
-        m.react("")
-        return await m.client.sendFileUrl(m.chat, dlLink, caption, m)
+
+                m.react("")
+
+                return await m.client.sendFileUrl(
+                        m.chat,
+                        dlLink,
+                        caption,
+                        m
+                )
+
         } catch (err) {
-        console.error(err)
-       return
-       await m.send(`${err}`)
+                console.error(err)
+                m.react("")
+                return await m.send(String(err))
+        }
+})
+
+
+kord({
+        cmd: "gdrive",
+        desc: "downloads google drive files",
+        fromMe: wtype,
+        type: "downloader",
+}, async (m, text) => {
+        try {
+                let lik
+
+                if (!text) {
+                        lik = m.quoted?.text
+                } else {
+                        lik = text
+                }
+
+                if (!lik) return m.send("_*reply/provide a google drive link!*_")
+
+                m.react("⏰")
+
+                const links = await extractUrlsFromString(lik)
+
+                const gdRegex = /^(https?:\/\/)?(drive\.google\.com)\/.+$/i
+
+                const link = links.find(url => gdRegex.test(url))
+
+                if (!link) {
+                        m.react("")
+                        return m.send("_*invalid google drive link!*_")
+                }
+
+                const data = await gdrive(link)
+
+                const filename = data.filename || "Google Drive File"
+                const size = data.size || "Unknown"
+                const dlLink = data.directUrl
+
+                const caption = `*❦ ɢ ᴏ ᴏ ɢ ʟ ᴇ • ᴅ ʀ ɪ ᴠ ᴇ • ᴅ ᴏ ᴡ ɴ ʟ ᴏ ᴀ ᴅ ᴇ ʀ ❦*
+➠ *FileName:* ${filename}
+➠ *File Size:* ${size}
+
+${config().CAPTION}`
+
+                m.react("")
+
+                return await m.client.sendFileUrl(
+                        m.chat,
+                        dlLink,
+                        caption,
+                        m
+                )
+
+        } catch (err) {
+                console.error(err)
+                m.react("")
+                return await m.send(String(err))
         }
 })
 

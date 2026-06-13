@@ -42,7 +42,7 @@ If you encounter any issue, reach out directly:
 ## 📢 Community
 
 - **WhatsApp Chat Group**  
-  [Join Group](https://chat.whatsapp.com/GXUhk1vRI5nL5E2wjJOMqC)
+  [Join Group](https://chat.whatsapp.com/BiUWsseAyN6B5JnK4lE7XX)
  
 - **WhatsApp Channel**  
   [Join Now](https://whatsapp.com/channel/0029VaghjWRHVvTh35lfZ817)

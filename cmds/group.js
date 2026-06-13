@@ -19,6 +19,7 @@ const {
   storeData,
   parsedJid,
   lidToJid,
+  Baileys,
   sleep,
   prefix,
   getMeta,
@@ -237,6 +238,73 @@ cmd: "kick",
 })
 
 kord({
+  cmd: "tkick",
+  desc: "temporarily kick a user from the group",
+  fromMe: wtype,
+  gc: true,
+  adminOnly: true,
+  type: "group",
+}, async (m, text) => {
+  try {
+    var botAd = await isBotAdmin(m);
+    if (!botAd) return await m.send("_*✘ Bot Needs To Be Admin!*_");
+    const timeRegex = /(\d+)\s*(s|sec|m|min|h|hr|d|day)/gi;
+    const matches = [...(text || "").matchAll(timeRegex)];
+
+    if (!matches.length) return await m.send(
+      `_✘ Provide a duration_\n_Example: ${m.prefix}tkick @user 10m_\n_Supports: s, m, h, d_`
+    );
+    const unitMap = { s: 1000, sec: 1000, m: 60000, min: 60000, h: 3600000, hr: 3600000, d: 86400000, day: 86400000 };
+    let totalMs = 0;
+    for (const match of matches) totalMs += parseInt(match[1]) * unitMap[match[2].toLowerCase()];
+    let user = m.mentionedJid[0] || m.quoted?.sender;
+    if (!user) {
+      const numText = text.replace(timeRegex, "").trim();
+      if (!numText) return await m.send("_✘ Reply to or mention a member_");
+      user = numText;
+    }
+    const jid = (user.includes('@') ? user.split('@')[0] : user).replace(/\D/g, '') + '@s.whatsapp.net';
+    const formatDuration = (ms) => {
+      const parts = [];
+      const d = Math.floor(ms / 86400000); if (d) parts.push(`${d}d`);
+      const h = Math.floor((ms % 86400000) / 3600000); if (h) parts.push(`${h}h`);
+      const min = Math.floor((ms % 3600000) / 60000); if (min) parts.push(`${min}m`);
+      const s = Math.floor((ms % 60000) / 1000); if (s) parts.push(`${s}s`);
+      return parts.join(' ');
+    };
+    await m.client.groupParticipantsUpdate(m.chat, [jid], "remove");
+    await m.send(
+      `_*✓ @${jid.split('@')[0]} temporarily kicked for ${formatDuration(totalMs)}*_`,
+      { mentions: [jid] }
+    );
+    setTimeout(async () => {
+      try {
+        const result = await m.client.groupParticipantsUpdate(m.chat, [jid], "add");
+        const status = result[0]?.status;
+
+        if (status === '200') {
+          await m.send(`_*✓ @${jid.split('@')[0]} has been re-added*_`, { mentions: [jid] });
+        } else if (status === '403') {
+          await m.send(`_✘ Could not re-add @${jid.split('@')[0]}, sending invite..._`, { mentions: [jid] });
+          await m.sendGroupInviteMessage(jid);
+        } else {
+          await m.send(`_✘ Could not re-add @${jid.split('@')[0]} (${status}), sending invite..._`, { mentions: [jid] });
+          const code = await m.client.groupInviteCode(m.chat);
+          await m.client.sendMessage(jid, { text: `https://chat.whatsapp.com/${code}` });
+        }
+      } catch (e) {
+        console.log("tkick re-add error", e);
+        await m.send(`_✘ Failed to re-add @${jid.split('@')[0]} after temp kick_`, { mentions: [jid] });
+      }
+    }, totalMs);
+
+  } catch (e) {
+    console.log("cmd error", e);
+    return await m.sendErr(e);
+  }
+})
+
+kord({
 cmd: "promote",
   desc: "promote a member to admin",
   fromMe: wtype,
@@ -260,7 +328,7 @@ cmd: "promote",
 })
 
 kord({
-cmd: "demote",
+  cmd: "demote",
   desc: "demote an admin to member",
   fromMe: wtype,
   gc: true,
@@ -270,15 +338,28 @@ cmd: "demote",
   try {
     var botAd = await isBotAdmin(m);
     if (!botAd) return await m.send("_*✘Bot Needs To Be Admin!*_");
-    var user = m.mentionedJid[0] || m.quoted?.sender || text
-    if (!user) return await m.send("✘ Reply to or mention an admin")
-    if(!await isadminn(m, user)) return await m.send("✘ Member is not admin")
+    if (text?.trim().toLowerCase() === "all") {
+      const groupMeta = await m.client.groupMetadata(m.chat);
+      const admins = groupMeta.participants.filter(p =>
+        (p.admin === "admin") &&
+        p.id !== m.client.user.id
+      );
+      if (!admins.length) return await m.send("✘ No demotable admins found");
+      const adminJids = admins.map(p => p.id);
+      await m.client.groupParticipantsUpdate(m.chat, adminJids, "demote");
+      const mentions = adminJids.map(j => `@${j.split("@")[0]}`).join(", ");
+      return await m.send(`✓ Demoted all admins: ${mentions}`, { mentions: adminJids });
+    }
+    var user = m.mentionedJid[0] || m.quoted?.sender || text;
+    if (!user) return await m.send("✘ Reply to or mention an admin");
+    if (!await isadminn(m, user)) return await m.send("✘ Member is not admin");
     let jid = parsedJid(user);
     await m.client.groupParticipantsUpdate(m.chat, [jid], "demote");
     return await m.send(`✓ @${jid.split("@")[0]} demoted`, { mentions: [jid] });
+
   } catch (e) {
-    console.log("cmd error", e)
-    return await m.sendErr(e)
+    console.log("cmd error", e);
+    return await m.sendErr(e);
   }
 })
 
@@ -649,6 +730,42 @@ kord({
 
 
 kord({
+  cmd: "all|everyone",
+  desc: "Tag everyone in the group with text",
+  fromMe: false,
+  type: "group",
+  gc: true,
+  adminOnly: true
+}, async (m, text) => {
+  try {
+    if (!text) return m.reply("Provide a message for the tag")
+
+    const jid = m.chat
+    const subject = text
+
+    const groupMetadata = await m.client.groupMetadata(jid)
+
+    await m.client.sendMessage(jid, {
+      text: '@' + jid,
+      contextInfo: {
+        mentionedJid: groupMetadata.participants.map(x => x.id),
+        groupMentions: [
+          {
+            groupJid: jid,
+            groupSubject: subject
+          }
+        ]
+      }
+    })
+
+  } catch (error) {
+    console.error(error)
+    m.sendErr(error)
+  }
+})
+
+
+kord({
   cmd: "creategc",
   desc: "create a group",
   fromMe: true,
@@ -768,166 +885,6 @@ ${groupInfo.desc ? `├ ➨ *Description:* \n${groupInfo.desc}\n` : ''}
   }
 })
 
-
-kord({
-  cmd: "antibot",
-  desc: "set action to be done when a visitor bot messaes in group",
-  fromMe: wtype,
-  gc: true,
-  type: "group",
-}, async (m, text) => {
-  try {
-  var botAd = await isBotAdmin(m);
-  if (!botAd) return await m.send("✘_*Bot Needs To Be Admin!*_")
-  
-  const args = text.split(" ");
-  if (args && args.length > 0) {
-  const option = args[0].toLowerCase();
-  const value = args.length > 1 ? args[1] : null;
-  const fArgs = args.slice(1).join(" ")
-  const chatJid = m.chat
-  
-  
-  var sdata = await getData("antibot_config");
-      if (!Array.isArray(sdata)) sdata = [];
-  let isExist = sdata.find(entry => entry.chatJid === chatJid);
-  if (option === "delete") {
-    var delc = { 
-      chatJid,
-     action: "del",
-     warnc: "0",
-     maxwrn: "3"
-    }
-    if (isExist) {
-      isExist.action = "del"
-    } else {
-      sdata.push(delc)
-    }
-    await storeData("antibot_config", JSON.stringify(sdata, null, 2))
-    return await m.send(`_*AntiBot Is Now Enabled!*_\n_Action:_ delete`)
-    } else  if (option === "kick") {
-      var kikc = {
-        chatJid,
-        "action": "kick", 
-        "warnc": "0",
-        "maxwrn": "3"
-      }
-       if (isExist) {
-      isExist.action = "kick"
-    } else {
-      sdata.push(kikc)
-    }
-    await storeData("antibot_config", JSON.stringify(sdata, null, 2))
-    return await m.send(`_*AntiBot Is Now Enabled!*_\n_Action:_ kick`)
-    } else if (option === "warn") {
-      var cou = parseInt(value)
-      if(!cou) return await m.send(`*_Use ${prefix}antibot warn 3_*`)
-      var warnco = {
-        chatJid,
-        "action": "warn",
-        "warnc": "0",
-        "maxwrn": cou
-      }
-      if (isExist) {
-      isExist.action = "warn"
-      isExist.maxwrn = cou
-    } else {
-      sdata.push(warnco)
-    }
-    await storeData("antibot_config", JSON.stringify(sdata, null, 2))
-    return await m.send(`_*AntiBot Is Now Enabled!*_\n_Action:_ Warn\n_MaxWarning:_ ${cou}`)
-    } else if (option === "status") {
-      if (!isExist) return await m.send("_AntiBot is Currently Disabled here..._")
-      var sc = `\`\`\`[ ANTI-BOT STATUS ]\`\`\`
-_Active?:_ Yes
-_Action:_ ${isExist.action}
-_MaxWARN:_ ${isExist.maxwrn}`
-      await m.send(sc)
-    } else if (option === "off") {
-      if (!isExist) return await m.send("_AntiBot is Currently Disabled here..._")
-        sdata = sdata.filter(entry => entry.chatJid !== chatJid)
-       await storeData("antibot_config", JSON.stringify(sdata, null, 2))
-       return await m.send("_*AntiBot disabled!*_")
-    } else {
-      var mssg = `\`\`\` [ Available AntiBot config ] \`\`\`
-_${pre}antibot delete_
-_${pre}antibot kick_
-_${pre}antibot warn 3_
-_${pre} antibot status_
-_${pre}antibot off_`
-      return m.send(`${mssg}`)
-    }
-    } else {
-      var msg = `\`\`\` [ Available AntiBot config ] \`\`\`
-_${pre}antibot delete_
-_${pre}antibot kick_
-_${pre}antibot warn 3_
-_${pre} antibot status_
-_${pre}antibot off_`
-      return m.send(`${msg}`)
-    }
-      
-    } catch (e) {
-      console.error(e)
-      m.send(`${e}`)
-    }
-})
-
-kord({
-on: "all",
-}, async (m, text) => {
-  try {
-    const isGroup = m.key.remoteJid.endsWith('@g.us');
-    if (isGroup) {
-    var botAd = await isBotAdmin(m);
-    if (!botAd) return;
-    
-    if(m.message.reactionMessage) return;
-    const cJid = m.key.remoteJid
-    const groupMetadata = await getMeta(m.client, m.chat);
-    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber);
-    const wCount = new Map()
-    if ((m.isBot || m.isBaileys) && !m.fromMe) {
-    var sdata = await getData("antibot_config");
-    if (!Array.isArray(sdata)) return;
-    let isExist = sdata.find(entry => entry.chatJid === cJid);
-    if (isExist && !admins.includes(m.sender)) {
-    var act = isExist.action
-    if (act === "del") {
-    await m.send(m, {}, "delete")
-      return await m.send(`_*Bots are not Allowed!!*_`)
-    } else if (act === "kick") {
-      await m.send(m, {}, "delete")
-      await m.send(`_*Bots are not Allowed!!*_\n_Goodbye!!_`)
-      await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
-    } else if (act === "warn") {
-      var cCount = (wCount.get(cJid) || 0) + 1
-      wCount.set(cJid, cCount)
-      var maxC = isExist.maxwrn
-      
-      var remain = maxC - cCount
-      if (remain > 0) {
-        var rmsg = `_*Bots are not Allowed!!*_
-_You are warned!_
-Warning(s): (${cCount}/${maxC})`
-      await m.send(`${rmsg}`)
-      await m.send(m, {}, "delete")
-      }
-      if (cCount >= maxC) {
-        await m.send(m, {}, "delete")
-        await m.send(`_*Max Warning Exceeded!!*_\n_Goodbye!!!_`)
-        await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
-        wCount.delete(cJid)
-      }
-    }
-  }
-  } else return;
-  }
-  } catch (e) {
-    console.log("cmd error", e)
-    return await m.sendErr(e)
-  }
-})
 
 
 
@@ -1160,7 +1117,9 @@ ${c} allow (url)
 ${c} unallow (url)
 ${c} listallow
 ${c} status
-${c} off\`\`\``
+${c} off
+
+use ${pre}reset to reset warn\`\`\``
     )
     }
     
@@ -1257,7 +1216,9 @@ ${c} allow <url>
 ${c} unallow <url>
 ${c} listallow
 ${c} status
-${c} off\`\`\``
+${c} off
+
+use ${pre}reset to reset warn\`\`\``
     )
     }
   } catch (e) {
@@ -1405,7 +1366,9 @@ ${c} warnc 5
 ${c} status/get
 ${c} remove <words>/all
 ${c} off
-${c} gay, stupid\`\`\``
+${c} gay, stupid
+
+use ${pre}reset to reset warn\`\`\``
     )
     
     if (cmd == "on") {
@@ -1725,6 +1688,7 @@ _${pre}antigm off_`
     }
 })
 
+const gwCount = new Map()
 kord({
 on: "all",
 }, async (m, text) => {
@@ -1738,7 +1702,6 @@ on: "all",
     const cJid = m.key.remoteJid
     const groupMetadata = await getMeta(m.client, m.chat);
     const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber);
-    const wCount = new Map()
     if (m.message?.groupStatusMentionMessage && !m.fromMe) {
     var sdata = await getData("antigm_config");
     if (!Array.isArray(sdata)) return;
@@ -1752,18 +1715,346 @@ on: "all",
       await m.send(m, {}, "delete")
       await m.send(`_*Status Mention is not Allowed!!*_\n_Goodbye!!_`)
       await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
-    } else if (act === "warn") {
-      var cCount = (wCount.get(cJid) || 0) + 1
-      wCount.set(cJid, cCount)
-      var maxC = isExist.maxwrn
+} else if (act === "warn") {
+  const warnKey = `${cJid}_${m.sender}`
+  var cCount = (gwCount.get(warnKey) || 0) + 1
+  gwCount.set(warnKey, cCount)
+  var maxC = parseInt(isExist.maxwrn)
+  if (cCount >= maxC) {
+    await m.send(m, {}, "delete")
+    await m.send(`_*@${m.sender.split('@')[0]} Max Warning Exceeded!!*_\n_Goodbye!!!_`, { mentions: [m.sender] })
+    await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove')
+    gwCount.delete(warnKey)
+  } else {
+    var rmsg = `_*Status Mention is not Allowed!!*_\n_You are warned!_\nWarning(s): (${cCount}/${maxC})\n_Remaining:_ ${maxC - cCount}`
+    await m.send(m, {}, "delete")
+    await m.send(rmsg, { mentions: [m.sender] })
+  }
+      if (cCount >= maxC) {
+        await m.send(m, {}, "delete")
+        await m.send(`_*Max Warning Exceeded!!*_\n_Goodbye!!!_`)
+        await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
+        gwCount.delete(cJid)
+      }
+    }
+  }
+  } else return;
+  }
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+
+kord({
+  cmd: "antigcstatus",
+  desc: "set action to be done when a user posts on the group status ",
+  fromMe: wtype,
+  gc: true,
+  type: "group",
+}, async (m, text) => {
+  try {
+  var botAd = await isBotAdmin(m);
+  if (!botAd) return await m.send("_*Bot Needs To Be Admin!*_")
+  
+  const args = text.split(" ");
+  if (args && args.length > 0) {
+  const option = args[0].toLowerCase();
+  const value = args.length > 1 ? args[1] : null;
+  const fArgs = args.slice(1).join(" ")
+  const chatJid = m.chat
+  
+  
+  var sdata = await getData("antigsw_config");
+      if (!Array.isArray(sdata)) sdata = [];
+  let isExist = sdata.find(entry => entry.chatJid === chatJid);
+  if (option === "delete") {
+    var delc = { 
+      chatJid,
+     action: "del",
+     warnc: "0",
+     maxwrn: "3"
+    }
+    if (isExist) {
+      isExist.action = "del"
+    } else {
+      sdata.push(delc)
+    }
+    await storeData("antigsw_config", JSON.stringify(sdata, null, 2))
+    return await m.send(`_*AntiGcStatus Is Now Enabled!*_\n_Action:_ delete`)
+    } else  if (option === "kick") {
+      var kikc = {
+        chatJid,
+        "action": "kick", 
+        "warnc": "0",
+        "maxwrn": "3"
+      }
+       if (isExist) {
+      isExist.action = "kick"
+    } else {
+      sdata.push(kikc)
+    }
+    await storeData("antigsw_config", JSON.stringify(sdata, null, 2))
+    return await m.send(`_*AntiGcStatus Is Now Enabled!*_\n_Action:_ kick`)
+    } else if (option === "warn") {
+      var cou = parseInt(value)
+      if(!cou) return await m.send(`*_Use ${prefix}Antigcstatus warn 3_*`)
+      var warnco = {
+        chatJid,
+        "action": "warn",
+        "warnc": "0",
+        "maxwrn": cou
+      }
+      if (isExist) {
+      isExist.action = "warn"
+      isExist.maxwrn = cou
+    } else {
+      sdata.push(warnco)
+    }
+    await storeData("antigsw_config", JSON.stringify(sdata, null, 2))
+    return await m.send(`_*AntiGcStatus Is Now Enabled!*_\n_Action:_ Warn\n_MaxWarning:_ ${cou}`)
+    } else if (option === "status") {
+      if (!isExist) return await m.send("AntiGcStatus is Currently Disabled here..._")
+      var sc = `\`\`\`[ ANTI-GC STATUS ]\`\`\`
+_Active?:_ Yes
+_Action:_ ${isExist.action}
+_MaxWARN:_ ${isExist.maxwrn}`
+      await m.send(sc)
+    } else if (option === "off") {
+      if (!isExist) return await m.send("_AntiGcStatus is Currently Disabled here..._")
+        sdata = sdata.filter(entry => entry.chatJid !== chatJid)
+       await storeData("antigsw_config", JSON.stringify(sdata, null, 2))
+       return await m.send("_*AntiGcStatus disabled!*_")
+    } else {
+      var mssg = `\`\`\` [ Available AntiGcStatus config ] \`\`\`
+_${pre}antigcstatus delete_
+_${pre}antigcstatus kick_
+_${pre}antigcstatus warn 3_
+_${pre}antigcstatus status_
+_${pre}antigcstatus off_`
+      return m.send(`${mssg}`)
+    }
+    } else {
+      var msg = `\`\`\` [ Available Antigcstatus config ] \`\`\`
+_${pre}antigcstatus delete_
+_${pre}antigcstatus kick_
+_${pre}antigcstatus warn 3_
+_${pre}antigcstatus status_
+_${pre}antigcstatus off_`
+      return m.send(`${msg}`)
+    }
       
-      var remain = maxC - cCount
-      if (remain > 0) {
-        var rmsg = `_*Status Mention is not Allowed!!*_
-_You are warned!_
-Warning(s): (${cCount}/${maxC})`
-      await m.send(`${rmsg}`)
+    } catch (e) {
+      console.error(e)
+      m.send(`${e}`)
+    }
+})
+
+const wwCount = new Map()
+kord({
+on: "all",
+}, async (m, text) => {
+  try {
+    const isGroup = m.key.remoteJid.endsWith('@g.us');
+    if (isGroup) {
+    var botAd = await isBotAdmin(m);
+    if (!botAd) return;
+    
+    if(m.message.reactionMessage) return;
+    const cJid = m.key.remoteJid
+    const groupMetadata = await getMeta(m.client, m.chat);
+    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber);
+    if (m.mtype === "groupStatusMessageV2" && !m.fromMe) {
+    var sdata = await getData("antigsw_config");
+    if (!Array.isArray(sdata)) return;
+    let isExist = sdata.find(entry => entry.chatJid === cJid);
+    if (isExist && !admins.includes(m.sender)) {
+    var act = isExist.action
+    if (act === "del") {
+    await m.send(m, {}, "delete")
+      return await m.send(`_*Gc Status is not Allowed!!*_`)
+    } else if (act === "kick") {
       await m.send(m, {}, "delete")
+      await m.send(`_*Gc Status is not Allowed!!*_\n_Goodbye!!_`)
+      await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
+} else if (act === "warn") {
+  const warnKey = `${cJid}_${m.sender}`
+  var cCount = (wwCount.get(warnKey) || 0) + 1
+  wwCount.set(warnKey, cCount)
+  var maxC = parseInt(isExist.maxwrn)
+  if (cCount >= maxC) {
+    await m.send(m, {}, "delete")
+    await m.send(`_*@${m.sender.split('@')[0]} Max Warning Exceeded!!*_\n_Goodbye!!!_`, { mentions: [m.sender] })
+    await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove')
+    wwCount.delete(warnKey)
+  } else {
+    var rmsg = `_*Gc Status is not Allowed!!*_\n_You are warned!_\nWarning(s): (${cCount}/${maxC})\n_Remaining:_ ${maxC - cCount}`
+    await m.send(m, {}, "delete")
+    await m.send(rmsg, { mentions: [m.sender] })
+  }
+      if (cCount >= maxC) {
+        await m.send(m, {}, "delete")
+        await m.send(`_*Max Warning Exceeded!!*_\n_Goodbye!!!_`)
+        await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
+        wwCount.delete(cJid)
+      }
+    }
+  }
+  } else return;
+  }
+  } catch (e) {
+    console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: "antibot",
+  desc: "set action to be done when a visitor bot messaes in group",
+  fromMe: wtype,
+  gc: true,
+  type: "group",
+}, async (m, text) => {
+  try {
+  var botAd = await isBotAdmin(m);
+  if (!botAd) return await m.send("✘_*Bot Needs To Be Admin!*_")
+  
+  const args = text.split(" ");
+  if (args && args.length > 0) {
+  const option = args[0].toLowerCase();
+  const value = args.length > 1 ? args[1] : null;
+  const fArgs = args.slice(1).join(" ")
+  const chatJid = m.chat
+  
+  
+  var sdata = await getData("antibot_config");
+      if (!Array.isArray(sdata)) sdata = [];
+  let isExist = sdata.find(entry => entry.chatJid === chatJid);
+  if (option === "delete") {
+    var delc = { 
+      chatJid,
+     action: "del",
+     warnc: "0",
+     maxwrn: "3"
+    }
+    if (isExist) {
+      isExist.action = "del"
+    } else {
+      sdata.push(delc)
+    }
+    await storeData("antibot_config", JSON.stringify(sdata, null, 2))
+    return await m.send(`_*AntiBot Is Now Enabled!*_\n_Action:_ delete`)
+    } else  if (option === "kick") {
+      var kikc = {
+        chatJid,
+        "action": "kick", 
+        "warnc": "0",
+        "maxwrn": "3"
+      }
+       if (isExist) {
+      isExist.action = "kick"
+    } else {
+      sdata.push(kikc)
+    }
+    await storeData("antibot_config", JSON.stringify(sdata, null, 2))
+    return await m.send(`_*AntiBot Is Now Enabled!*_\n_Action:_ kick`)
+    } else if (option === "warn") {
+      var cou = parseInt(value)
+      if(!cou) return await m.send(`*_Use ${prefix}antibot warn 3_*`)
+      var warnco = {
+        chatJid,
+        "action": "warn",
+        "warnc": "0",
+        "maxwrn": cou
+      }
+      if (isExist) {
+      isExist.action = "warn"
+      isExist.maxwrn = cou
+    } else {
+      sdata.push(warnco)
+    }
+    await storeData("antibot_config", JSON.stringify(sdata, null, 2))
+    return await m.send(`_*AntiBot Is Now Enabled!*_\n_Action:_ Warn\n_MaxWarning:_ ${cou}`)
+    } else if (option === "status") {
+      if (!isExist) return await m.send("_AntiBot is Currently Disabled here..._")
+      var sc = `\`\`\`[ ANTI-BOT STATUS ]\`\`\`
+_Active?:_ Yes
+_Action:_ ${isExist.action}
+_MaxWARN:_ ${isExist.maxwrn}`
+      await m.send(sc)
+    } else if (option === "off") {
+      if (!isExist) return await m.send("_AntiBot is Currently Disabled here..._")
+        sdata = sdata.filter(entry => entry.chatJid !== chatJid)
+       await storeData("antibot_config", JSON.stringify(sdata, null, 2))
+       return await m.send("_*AntiBot disabled!*_")
+    } else {
+      var mssg = `\`\`\` [ Available AntiBot config ] \`\`\`
+_${pre}antibot delete_
+_${pre}antibot kick_
+_${pre}antibot warn 3_
+_${pre} antibot status_
+_${pre}antibot off_`
+      return m.send(`${mssg}`)
+    }
+    } else {
+      var msg = `\`\`\` [ Available AntiBot config ] \`\`\`
+_${pre}antibot delete_
+_${pre}antibot kick_
+_${pre}antibot warn 3_
+_${pre} antibot status_
+_${pre}antibot off_`
+      return m.send(`${msg}`)
+    }
+      
+    } catch (e) {
+      console.error(e)
+      m.send(`${e}`)
+    }
+})
+
+    const wCount = new Map()
+kord({
+on: "all",
+}, async (m, text) => {
+  try {
+    const isGroup = m.key.remoteJid.endsWith('@g.us');
+    if (isGroup) {
+    var botAd = await isBotAdmin(m);
+    if (!botAd) return;
+    
+    if(m.message.reactionMessage) return;
+    const cJid = m.key.remoteJid
+    const groupMetadata = await getMeta(m.client, m.chat);
+    const admins =  groupMetadata.participants.filter(v => v.admin !== null).map(v => v.jid || v.phoneNumber);
+    if ((m.isBot || m.isBaileys) && !m.fromMe) {
+    var sdata = await getData("antibot_config");
+    if (!Array.isArray(sdata)) return;
+    let isExist = sdata.find(entry => entry.chatJid === cJid);
+    if (isExist && !admins.includes(m.sender)) {
+    var act = isExist.action
+    if (act === "del") {
+    await m.send(m, {}, "delete")
+      return await m.send(`_*Bots are not Allowed!!*_`)
+    } else if (act === "kick") {
+      await m.send(m, {}, "delete")
+      await m.send(`_*Bots are not Allowed!!*_\n_Goodbye!!_`)
+      await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove');
+} else if (act === "warn") {
+  const warnKey = `${cJid}_${m.sender}`
+  var cCount = (wCount.get(warnKey) || 0) + 1
+  wCount.set(warnKey, cCount)
+  var maxC = parseInt(isExist.maxwrn)
+  if (cCount >= maxC) {
+    await m.send(m, {}, "delete")
+    await m.send(`_*Max Warning Exceeded!!*_\n_Goodbye!!!_`)
+    await m.client.groupParticipantsUpdate(cJid, [m.sender], 'remove')
+    wCount.delete(warnKey)
+  } else {
+    var rmsg = `_*Bots are not Allowed!!*_\n_You are warned!_\nWarning(s): (${cCount}/${maxC})\n_Remaining:_ ${maxC - cCount}`
+    await m.send(m, {}, "delete")
+    await m.send(rmsg)
+  }
       if (cCount >= maxC) {
         await m.send(m, {}, "delete")
         await m.send(`_*Max Warning Exceeded!!*_\n_Goodbye!!!_`)
@@ -1774,12 +2065,12 @@ Warning(s): (${cCount}/${maxC})`
   }
   } else return;
   }
-    }
   } catch (e) {
     console.log("cmd error", e)
     return await m.sendErr(e)
   }
 })
+
 
 const formatTimeAgo = sec => {
   const h = Math.floor(sec / 3600)
@@ -1979,7 +2270,9 @@ _${pre}antispam kick_
 _${pre}antispam warn 3_
 _${pre}antispam limit 5 10_
 _${pre}antispam status_
-_${pre}antispam off_`
+_${pre}antispam off_
+
+_use ${pre}reset to reset warn_`
       return m.send(`${mssg}`)
     }
     } else {
@@ -1989,7 +2282,9 @@ _${pre}antispam kick_
 _${pre}antispam warn 3_
 _${pre}antispam limit 5 10_
 _${pre}antispam status_
-_${pre}antispam off_`
+_${pre}antispam off_
+
+_use ${pre}reset to reset warn_`
       return m.send(`${msg}`)
     }
       
@@ -2200,7 +2495,9 @@ _${pre}antitag admins_
 _${pre}antitag members_
 _${pre}antitag member_
 _${pre}antitag status_
-_${pre}antitag off_`
+_${pre}antitag off_
+
+_use ${pre}reset to reset warn_`
       return m.send(`${mssg}`)
     }
     } else {
@@ -2212,7 +2509,9 @@ _${pre}antitag admins_
 _${pre}antitag members_
 _${pre}antitag member_
 _${pre}antitag status_
-_${pre}antitag off_`
+_${pre}antitag off_
+
+_use ${pre}reset to reset warn_`
       return m.send(`${msg}`)
     }
       
@@ -2322,6 +2621,91 @@ _Remaining:_ ${remain}`
   }
 })
 
+
+
+kord({
+  cmd: "reset",
+  desc: "reset warn count of a user for a specific anti-feature",
+  fromMe: wtype,
+  gc: true,
+  adminOnly: true,
+  type: "group",
+}, async (m, text) => {
+  try {
+    var botAd = await isBotAdmin(m);
+    if (!botAd) return await m.send("_*✘Bot Needs To Be Admin!*_");
+
+    const args = text.trim().split(" ");
+    const feature = args[0]?.toLowerCase();
+    const user = m.mentionedJid[0] || m.quoted?.sender;
+
+    const validFeatures = ["antispam", "antitag", "antigm", "antibot", "antiword", "antilink", "antigcstatus"];
+
+    if (!feature || !validFeatures.includes(feature)) {
+      return await m.send(
+        `_*Usage:*_ .reset <feature> @user\n\n_Available features:_\n${validFeatures.map(f => `• ${f}`).join("\n")}`
+      );
+    }
+
+    if (!user) return await m.send("_✘ Reply to or mention a user_");
+
+    const chatJid = m.chat;
+    const userTag = `@${user.split("@")[0]}`;
+    const userKey = `${chatJid}_${user}`;
+
+    if (feature === "antispam") {
+      const hadMsgCount = userMessageCount.has(userKey);
+      const hadWarning = userWarnings.has(userKey);
+      userMessageCount.delete(userKey);
+      userWarnings.delete(userKey);
+      if (!hadMsgCount && !hadWarning) return await m.send(`_✘ No antispam record found for ${userTag}_`, { mentions: [user] });
+      return await m.send(`_✓ Antispam warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+    if (feature === "antitag") {
+      if (!tagWarnings.has(userKey)) return await m.send(`_✘ No antitag record found for ${userTag}_`, { mentions: [user] });
+      tagWarnings.delete(userKey);
+      return await m.send(`_✓ Antitag warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+    if (feature === "antigm") {
+      if (!gwCount.has(userKey)) return await m.send(`_✘ No antigm record found for ${userTag}_`, { mentions: [user] });
+      gwCount.delete(userKey);
+      return await m.send(`_✓ Antigm warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+    if (feature === "antibot") {
+      if (!wCount.has(userKey)) return await m.send(`_✘ No antibot record found for ${userTag}_`, { mentions: [user] });
+      wCount.delete(userKey);
+      return await m.send(`_✓ Antibot warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+    if (feature === "antigcstatus") {
+      if (!wwCount.has(userKey)) return await m.send(`_✘ No antigcstatus record found for ${userTag}_`, { mentions: [user] });
+      wwCount.delete(userKey);
+      return await m.send(`_✓ Antigcstatus warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+    if (feature === "antiword") {
+      if (!warns[chatJid]?.[user]) return await m.send(`_✘ No antiword record found for ${userTag}_`, { mentions: [user] });
+      warns[chatJid][user] = 0;
+      return await m.send(`_✓ Antiword warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+    if (feature === "antilink") {
+      var data = await getData("antilink") || {};
+      if (!data.warnCounts?.[chatJid]?.[user]) return await m.send(`_✘ No antilink record found for ${userTag}_`, { mentions: [user] });
+      delete data.warnCounts[chatJid][user];
+      await storeData("antilink", data);
+      return await m.send(`_✓ Antilink warns reset for ${userTag}_`, { mentions: [user] });
+    }
+
+  } catch (e) {
+    console.log("reset cmd error", e);
+    return await m.sendErr(e);
+  }
+});
+
 const parseInterval = input => {
   const match = input.match(/(\d+)([dhm])/i)
   if (!match) return 0
@@ -2427,6 +2811,167 @@ cmd: "kickr",
     }
   } catch (e) {
     console.log("cmd error", e)
+    return await m.sendErr(e)
+  }
+})
+
+kord({
+  cmd: 'gcstatus|upswgc',
+  desc: 'Send group status update',
+  fromMe: wtype,
+  gc: false,
+  type: 'group'
+}, async (m, text) => {
+  try {
+    const {
+      prepareWAMessageMedia,
+      generateWAMessageFromContent,
+      proto
+    } = await Baileys()
+
+    const COLORS = {
+      green:  0xFF25D366,
+      red:    0xFFFF0000,
+      blue:   0xFF0000FF,
+      yellow: 0xFFFFFF00,
+      purple: 0xFF800080,
+      black:  0xFF000000,
+      white:  0xFFFFFFFF,
+      orange: 0xFFFFA500
+    }
+
+    const quoted = m.quoted
+    const isImage = quoted?.image
+    const isVideo = quoted?.video
+    const isAudio = quoted?.audio
+
+    let groupId
+    let messageText
+    let chosenColor = null
+    
+    if (
+  (
+    m.chat === "120363425297756989@g.us" ||
+    m.chat === "120363420506313518@g.us"
+  ) &&
+  !m.isAdmin
+) return m.send("_not this group_")
+
+    if (!m.isGroup) {
+      if (quoted && (isImage || isVideo || isAudio)) {
+        if (!text) {
+          return await m.send(
+            `Provide the group JID.\nUsage: .gcstatus groupjid\nExample: .gcstatus 123456789-123456@g.us`
+          )
+        }
+        groupId = text.trim()
+      } else {
+        if (!text) {
+          return await m.send(
+            `Usage: .gcstatus groupjid,message,color\nExample: .gcstatus 123456789-123456@g.us,Hello!,blue\nColors: ${Object.keys(COLORS).join(', ')}`
+          )
+        }
+        const parts = text.split(',').map(p => p.trim())
+        if (parts.length < 2) {
+          return await m.send(`Provide at least group JID and text.\nExample: .gcstatus 123456789-123456@g.us,Hello!`)
+        }
+        groupId = parts[0]
+        messageText = parts[1]
+        if (parts[2] && COLORS[parts[2].toLowerCase()]) {
+          chosenColor = COLORS[parts[2].toLowerCase()]
+        }
+      }
+    } else {
+      groupId = m.chat
+      messageText = text
+    }
+
+    if (!isImage && !isVideo && !isAudio && !messageText) {
+      return await m.send(
+        `Reply to media or provide text\n\nExamples:\n.gcstatus\n.gcstatus Hello Group\n.gcstatus Hello Group,red\nColors: ${Object.keys(COLORS).join(', ')}`
+      )
+    }
+
+    let messagePayload = {}
+
+    if (isImage || isVideo || isAudio) {
+      const mediaBuffer = await quoted.download()
+      let mediaOptions = {}
+
+      if (isImage) {
+        mediaOptions = { image: mediaBuffer, caption: quoted.text || '' }
+      } else if (isVideo) {
+        mediaOptions = { video: mediaBuffer, caption: quoted.text || '' }
+      } else if (isAudio) {
+        mediaOptions = {
+          audio: mediaBuffer,
+          mimetype: quoted.mimetype,
+          ptt: quoted.ptt || false,
+          seconds: quoted.seconds,
+          waveform: quoted.waveform
+        }
+      }
+
+      const preparedMedia = await prepareWAMessageMedia(
+        mediaOptions,
+        { upload: m.client.waUploadToServer }
+      )
+
+      let mediaMessage = {}
+      if (isImage) mediaMessage = { imageMessage: preparedMedia.imageMessage }
+      else if (isVideo) mediaMessage = { videoMessage: preparedMedia.videoMessage }
+      else if (isAudio) mediaMessage = { audioMessage: preparedMedia.audioMessage }
+
+      messagePayload = {
+        groupStatusMessageV2: { message: mediaMessage }
+      }
+    } else {
+      let bgColor = chosenColor ?? (() => {
+        const randomHex = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')
+        return 0xff000000 + parseInt(randomHex, 16)
+      })()
+
+      if (m.isGroup && messageText?.includes(',')) {
+        const parts = messageText.split(',').map(p => p.trim())
+        messageText = parts[0]
+        if (parts[1] && COLORS[parts[1].toLowerCase()]) {
+          bgColor = COLORS[parts[1].toLowerCase()]
+        }
+      }
+
+      messagePayload = {
+        groupStatusMessageV2: {
+          message: {
+            extendedTextMessage: {
+              text: messageText,
+              backgroundArgb: bgColor,
+              font: 2
+            }
+          }
+        }
+      }
+    }
+
+    const msg = generateWAMessageFromContent(
+      groupId,
+      proto.Message.fromObject(messagePayload),
+      { userJid: m.client.user.id }
+    )
+
+    await m.client.relayMessage(
+      groupId,
+      msg.message,
+      { messageId: msg.key.id }
+    )
+
+    if (!m.isGroup) {
+      await m.send('Group status sent successfully.')
+    }
+
+    return await m.react('✓')
+
+  } catch (e) {
+    console.log('cmd error', e)
     return await m.sendErr(e)
   }
 })

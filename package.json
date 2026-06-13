@@ -18,11 +18,9 @@
   ],
   "author": "M3264",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/M3264/Kord-Ai/issues"
-  },
   "homepage": "https://github.com/M3264/Kord-Ai#readme",
   "dependencies": {
+    "@mistralai/mistralai": "^2.2.1",
     "axios": "^0.27.2",
     "baileys": "7.0.0-rc.9",
     "chalk": "^4.1.2",
@@ -54,6 +52,7 @@
     "sharp": "0.32.6",
     "sqlite": "5.1.1",
     "sqlite3": "^5.0.11",
+    "tus-js-client": "^4.3.1",
     "uuid": "^11.1.0",
     "wa-sticker-formatter": "^4.4.4",
     "word-list": "^4.1.0",
