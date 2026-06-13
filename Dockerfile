@@ -1,4 +1,4 @@
-FROM node:21
+FROM node:22
 
 RUN if ! command -v ffmpeg >/dev/null 2>&1; then \
   apt-get update && \
@@ -8,5 +8,5 @@ fi
 
 WORKDIR /app
 COPY . .
-RUN npm install --legacy-peer-deps
+RUN npm install
 CMD ["npm", "start"]
