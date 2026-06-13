@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node index.js",
-    "start": "pm2 restart kord-v2 --node-args=\"--experimental-require-module\"",
+    "start": "pm2-runtime start index.js --name kord-v2",
     "build": "echo 'Not needed'",
     "stop": "npx pm2 stop kord-ai"
   },
